@@ -1,0 +1,35 @@
+import { Controller, Get, Post, Body, Patch, Param } from '@nestjs/common';
+import { UsersService } from './users.service';
+
+@Controller('users')
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  /**
+   * 로그인 후 호출: DB에 유저가 없으면 생성, 있으면 반환
+   */
+  @Post('sync')
+  syncUser(@Body() body: { id: string; email: string }) {
+    // 실제 운영에서는 Guards를 통해 토큰에서 id, email을 추출하는 것이 좋습니다.
+    return this.usersService.syncUser(body.id, body.email);
+  }
+
+  /**
+   * 내 정보 조회
+   */
+  @Get(':id')
+  getProfile(@Param('id') id: string) {
+    return this.usersService.getProfile(id);
+  }
+
+  /**
+   * 내 정보 수정 (닉네임, 프로필 이미지 등)
+   */
+  @Patch(':id')
+  updateProfile(
+    @Param('id') id: string,
+    @Body() updateData: { nickname?: string; profile_image_url?: string },
+  ) {
+    return this.usersService.updateProfile(id, updateData);
+  }
+}

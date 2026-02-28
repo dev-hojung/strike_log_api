@@ -6,6 +6,19 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   /**
+   * 이메일/비밀번호 기반 회원가입
+   *
+   * @param body email, password, nickname 필드 포함
+   * @returns 가입된 유저 정보
+   */
+  @Post('signup')
+  async signup(
+    @Body() body: { email: string; password?: string; nickname?: string },
+  ) {
+    return this.usersService.signup(body.email, body.password, body.nickname);
+  }
+
+  /**
    * 로그인 후 호출: DB에 유저가 없으면 생성, 있으면 반환
    */
   @Post('sync')

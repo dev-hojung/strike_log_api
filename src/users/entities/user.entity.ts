@@ -25,6 +25,12 @@ export class User {
   email: string;
 
   /**
+   * 비밀번호 (해싱되어 저장됨)
+   */
+  @Column({ nullable: true, select: false })
+  password?: string;
+
+  /**
    * 닉네임
    */
   @Column({ nullable: true })

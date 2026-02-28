@@ -6,12 +6,14 @@ import { AppService } from './app.service';
 import { UsersModule } from './users/users.module';
 import { GroupsModule } from './groups/groups.module';
 import { GamesModule } from './games/games.module';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: `${process.cwd()}/.env`,
+      cache: false,
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -21,8 +23,8 @@ import { GamesModule } from './games/games.module';
         host: configService.get<string>('DB_HOST', 'localhost'),
         port: configService.get<number>('DB_PORT', 3306),
         username: configService.get<string>('DB_USERNAME', 'root'),
-        password: configService.get<string>('DB_PASSWORD', ''),
-        database: configService.get<string>('DB_DATABASE', 'flutter_bowling'),
+        password: configService.get<string>('DB_PASSWORD', 'likaid12!@'),
+        database: configService.get<string>('DB_DATABASE', 'strike_log'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: true, // 개발 환경에서만 사용
       }),
@@ -30,6 +32,7 @@ import { GamesModule } from './games/games.module';
     UsersModule,
     GroupsModule,
     GamesModule,
+    EmailModule,
   ],
   controllers: [AppController],
   providers: [AppService],

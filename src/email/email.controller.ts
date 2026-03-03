@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Post,
-  Body,
-  BadRequestException,
-  HttpCode,
-  HttpStatus,
-} from '@nestjs/common';
+import { Controller, Post, Body, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
 import { EmailService } from './email.service';
 
 @Controller('email')
@@ -23,16 +16,14 @@ export class EmailController {
 
   @Post('verify-otp')
   @HttpCode(HttpStatus.OK)
-  verifyOtp(@Body() body: { email: string; code: string }) {
+  async verifyOtp(@Body() body: { email: string; code: string }) {
     const { email, code } = body;
     if (!email || !code) {
       throw new BadRequestException('이메일과 인증번호가 필요합니다.');
     }
-    const isValid = this.emailService.verifyOtp(email, code);
+    const isValid = await this.emailService.verifyOtp(email, code);
     if (!isValid) {
-      throw new BadRequestException(
-        '인증번호가 일치하지 않거나 만료되었습니다.',
-      );
+      throw new BadRequestException('인증번호가 일치하지 않거나 만료되었습니다.');
     }
     return { success: true, message: '인증이 완료되었습니다.' };
   }

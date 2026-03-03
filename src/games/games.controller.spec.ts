@@ -43,10 +43,7 @@ describe('GamesController', () => {
       mockGamesService.createGame.mockResolvedValue(result);
 
       expect(await controller.createGame(createGameDto)).toEqual(result);
-      expect(service.createGame).toHaveBeenCalledWith(
-        'user-uuid',
-        createGameDto,
-      );
+      expect(service.createGame).toHaveBeenCalledWith('user-uuid', createGameDto);
     });
   });
 

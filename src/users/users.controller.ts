@@ -1,3 +1,4 @@
+import { LoginUserDto } from './dto/login-user.dto';
 import { Controller, Get, Post, Body, Patch, Param } from '@nestjs/common';
 import { UsersService } from './users.service';
 
@@ -11,10 +12,17 @@ export class UsersController {
    * @param body email, password, nickname 필드 포함
    * @returns 가입된 유저 정보
    */
+
+  /**
+   * 이메일/비밀번호 로그인
+   */
+  @Post('login')
+  async login(@Body() body: LoginUserDto) {
+    return this.usersService.login(body.email, body.password);
+  }
+
   @Post('signup')
-  async signup(
-    @Body() body: { email: string; password?: string; nickname?: string },
-  ) {
+  async signup(@Body() body: { email: string; password?: string; nickname?: string }) {
     return this.usersService.signup(body.email, body.password, body.nickname);
   }
 

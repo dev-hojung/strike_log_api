@@ -2,6 +2,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -54,6 +55,30 @@ export class UsersService {
   /**
    * Supabase Auth 성공 시 DB에 유저 정보 동기화
    */
+
+  /**
+   * 이메일과 비밀번호를 사용하여 로그인을 진행합니다.
+   */
+  async login(email: string, password?: string) {
+    const user = await this.userRepository.findOne({ where: { email } });
+    if (!user) {
+      throw new UnauthorizedException('이메일 또는 비밀번호가 일치하지 않습니다.');
+    }
+
+    if (user.password && password) {
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (!isPasswordValid) {
+        throw new UnauthorizedException('이메일 또는 비밀번호가 일치하지 않습니다.');
+      }
+    } else if (user.password && !password) {
+      throw new UnauthorizedException('비밀번호를 입력해주세요.');
+    }
+
+    // 보안을 위해 비밀번호 제외하고 반환
+    const { password: _, ...result } = user;
+    return result;
+  }
+
   async syncUser(id: string, email: string) {
     let user = await this.userRepository.findOne({ where: { id } });
     if (!user) {

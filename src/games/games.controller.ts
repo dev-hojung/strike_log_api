@@ -15,6 +15,7 @@ export class GamesController {
       user_id: string;
       total_score: number;
       play_date?: Date;
+      location?: string;
       frames?: any[]; // Frame DTO 대신 any 사용 최소화를 위해 임시 배열 허용
     },
   ) {
@@ -22,6 +23,22 @@ export class GamesController {
     // 여기서는 테스트를 위해 Body에 user_id를 포함한다고 가정.
     const user_id = String(createData.user_id);
     return this.gamesService.createGame(user_id, createData);
+  }
+
+  /**
+   * 사용자 통계 (평균 점수, 최고 점수, 최근 10게임) 조회
+   */
+  @Get('users/:user_id/statistics')
+  getUserStatistics(@Param('user_id') user_id: string) {
+    return this.gamesService.getUserStatistics(user_id);
+  }
+
+  /**
+   * 최근 게임 1건 상세 요약 조회
+   */
+  @Get('users/:user_id/recent')
+  getRecentGame(@Param('user_id') user_id: string) {
+    return this.gamesService.getRecentGame(user_id);
   }
 
   /**

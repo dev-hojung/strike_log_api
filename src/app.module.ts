@@ -7,6 +7,7 @@ import { UsersModule } from './users/users.module';
 import { GroupsModule } from './groups/groups.module';
 import { GamesModule } from './games/games.module';
 import { EmailModule } from './email/email.module';
+import { GameRoomsModule } from './game-rooms/game-rooms.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { EmailModule } from './email/email.module';
     GroupsModule,
     GamesModule,
     EmailModule,
+    GameRoomsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

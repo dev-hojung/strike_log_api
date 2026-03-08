@@ -47,6 +47,12 @@ export class Game {
   @Column({ type: 'date' })
   play_date: Date;
 
+  /**
+   * 볼링장 이름(장소)
+   */
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  location: string;
+
   @CreateDateColumn()
   created_at: Date;
 

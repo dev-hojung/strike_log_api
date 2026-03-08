@@ -40,15 +40,34 @@ export class GroupsService {
   }
 
   /**
-   * 내가 가입한 클럽 리스트 조회
+   * 내가 가입한 클럽 리스트 및 멤버 요약 조회 (대시보드용)
    */
   async getMyGroups(user_id: string) {
     const list = await this.groupMemberRepository.find({
       where: { user_id },
-      relations: ['group'],
+      relations: ['group', 'group.members', 'group.members.user'],
       order: { joined_at: 'DESC' },
     });
-    return list.map((m) => m.group);
+
+    return list.map((m) => {
+      const group = m.group;
+      const members = group.members.map((gm) => ({
+        user_id: gm.user.id,
+        nickname: gm.user.nickname,
+        profile_image_url: gm.user.profile_image_url,
+      }));
+
+      // 엔티티 순환 참조 및 불필요한 데이터 제거 후 요약본 반환
+      return {
+        id: group.id,
+        name: group.name,
+        description: group.description,
+        cover_image_url: group.cover_image_url,
+        created_at: group.created_at,
+        memberCount: members.length,
+        memberSummary: members.slice(0, 3), // 화면에 보여줄 3명만 추출
+      };
+    });
   }
 
   /**

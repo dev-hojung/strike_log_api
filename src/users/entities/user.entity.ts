@@ -31,6 +31,12 @@ export class User {
   nickname: string;
 
   /**
+   * 전화번호
+   */
+  @Column({ nullable: true })
+  phone: string;
+
+  /**
    * 프로필 이미지 주소
    */
   @Column({ nullable: true })

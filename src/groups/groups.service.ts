@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Group } from './entities/group.entity';
 import { GroupMember, GroupRole } from './entities/group-member.entity';
+import { Game } from '../games/entities/game.entity';
 
 @Injectable()
 export class GroupsService {
@@ -11,6 +12,8 @@ export class GroupsService {
     private readonly groupRepository: Repository<Group>,
     @InjectRepository(GroupMember)
     private readonly groupMemberRepository: Repository<GroupMember>,
+    @InjectRepository(Game)
+    private readonly gameRepository: Repository<Game>,
   ) {}
 
   /**
@@ -110,5 +113,45 @@ export class GroupsService {
       relations: ['user'], // 유저 정보도 함께
       order: { role: 'ASC', joined_at: 'ASC' },
     });
+  }
+
+  /**
+   * 클럽 멤버 리스트 + 각 멤버의 평균 점수를 함께 반환
+   */
+  async getMembersWithStats(id: number) {
+    const members = await this.groupMemberRepository.find({
+      where: { group_id: id },
+      relations: ['user'],
+      order: { role: 'ASC', joined_at: 'ASC' },
+    });
+
+    const result = await Promise.all(
+      members.map(async (member) => {
+        const games = await this.gameRepository.find({
+          where: { user_id: member.user_id },
+          select: ['total_score'],
+        });
+
+        const avgScore =
+          games.length > 0
+            ? Math.round(games.reduce((sum, g) => sum + g.total_score, 0) / games.length)
+            : 0;
+
+        return {
+          group_id: member.group_id,
+          user_id: member.user_id,
+          role: member.role,
+          joined_at: member.joined_at,
+          user: {
+            id: member.user.id,
+            nickname: member.user.nickname,
+            profile_image_url: member.user.profile_image_url,
+          },
+          avg_score: avgScore,
+        };
+      }),
+    );
+
+    return result;
   }
 }

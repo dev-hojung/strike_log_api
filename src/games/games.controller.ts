@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, BadRequestException } from '@nestjs/common';
 import { GamesService } from './games.service';
 
 @Controller('games')
@@ -7,6 +7,11 @@ export class GamesController {
 
   /**
    * 새로운 게임 기록 생성
+   * 클라이언트가 user_id를 누락했을 때 'undefined' 문자열 변환으로 인한 외래키 제약조건 에러를 방지하기 위해 예외 처리를 추가했습니다.
+   *
+   * @param createData 게임 생성에 필요한 데이터 (user_id 필수 포함)
+   * @returns 생성된 게임 기록
+   * @throws {BadRequestException} user_id가 누락되었을 경우 발생
    */
   @Post()
   createGame(
@@ -19,9 +24,12 @@ export class GamesController {
       frames?: any[]; // Frame DTO 대신 any 사용 최소화를 위해 임시 배열 허용
     },
   ) {
+    if (!createData.user_id) {
+      throw new BadRequestException('user_id가 필요합니다.');
+    }
     // 실제 운영 시 @Req() req를 통해 req.user.id 등 토큰 기반 유저id 주입 필요
     // 여기서는 테스트를 위해 Body에 user_id를 포함한다고 가정.
-    const user_id = String(createData.user_id);
+    const user_id = createData.user_id;
     return this.gamesService.createGame(user_id, createData);
   }
 

@@ -43,6 +43,7 @@ export class GamesService {
         highestScore: 0,
         highestScoreDate: null,
         recentTrend: [],
+        monthlyTrend: { status: 'none' },
       };
     }
 
@@ -67,11 +68,76 @@ export class GamesService {
         date: game.play_date,
       }));
 
+    // 이번 달 / 지난 달 에버리지 비교 (지난달 대비 상승률 계산)
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    // 지난 달의 연도/월 계산 (1월이면 전년 12월로)
+    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+
+    // 이번 달 경기 필터링
+    const thisMonthGames = allGames.filter((game) => {
+      const d = new Date(game.play_date);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+
+    // 지난 달 경기 필터링
+    const lastMonthGames = allGames.filter((game) => {
+      const d = new Date(game.play_date);
+      return d.getMonth() === lastMonth && d.getFullYear() === lastMonthYear;
+    });
+
+    // 월별 에버리지 및 변동률 계산 (4가지 시나리오 구분)
+    const thisMonthAvg =
+      thisMonthGames.length > 0
+        ? Math.round(
+            thisMonthGames.reduce((sum, g) => sum + g.total_score, 0) / thisMonthGames.length,
+          )
+        : null;
+    const lastMonthAvg =
+      lastMonthGames.length > 0
+        ? Math.round(
+            lastMonthGames.reduce((sum, g) => sum + g.total_score, 0) / lastMonthGames.length,
+          )
+        : null;
+
+    let monthlyTrend: Record<string, unknown>;
+
+    if (thisMonthAvg !== null && lastMonthAvg !== null && lastMonthAvg > 0) {
+      // 양쪽 데이터 모두 있음 → 퍼센트 변동률 계산
+      monthlyTrend = {
+        status: 'both',
+        currentMonthAvg: thisMonthAvg,
+        lastMonthAvg: lastMonthAvg,
+        percentage: parseFloat((((thisMonthAvg - lastMonthAvg) / lastMonthAvg) * 100).toFixed(1)),
+        currentMonthGameCount: thisMonthGames.length,
+      };
+    } else if (thisMonthAvg !== null && lastMonthAvg === null) {
+      // 이번 달만 데이터 있음
+      monthlyTrend = {
+        status: 'current_only',
+        currentMonthAvg: thisMonthAvg,
+        currentMonthGameCount: thisMonthGames.length,
+      };
+    } else if (thisMonthAvg === null && lastMonthAvg !== null) {
+      // 지난달만 데이터 있음
+      monthlyTrend = {
+        status: 'last_only',
+        lastMonthAvg: lastMonthAvg,
+      };
+    } else {
+      // 양쪽 모두 데이터 없음
+      monthlyTrend = { status: 'none' };
+    }
+
     return {
       averageScore,
       highestScore,
       highestScoreDate,
       recentTrend,
+      monthlyTrend,
     };
   }
 

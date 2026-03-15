@@ -1,98 +1,108 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Strike Log API (flutter_bowling_api)
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+스트라이크 로그(Strike Log) 앱의 백엔드를 담당하는 API 서버입니다. 
+볼링 점수 및기록 관리, 사용자 및 클럽(그룹) 기능, 통계 조회 등을 제공합니다.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## 기술 스택
+- **Framework**: NestJS (Node.js)
+- **Database**: MySQL, TypeORM
+- **Authentication**: Supabase Auth 연동 고려 (현재 자체 이메일/비밀번호 및 sync 제공)
+- **Language**: TypeScript
 
-## Description
+---
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## DB 관계도 (ERD)
 
-## Project setup
+```mermaid
+erDiagram
+    users {
+        string id PK "UUID"
+        string email UK
+        string password
+        string nickname
+        string profile_image_url
+        datetime created_at
+        datetime updated_at
+    }
+    groups {
+        int id PK
+        string name
+        text description
+        string cover_image_url
+        datetime created_at
+        datetime updated_at
+    }
+    group_members {
+        int group_id PK, FK
+        string user_id PK, FK
+        enum role "ADMIN, MEMBER"
+        datetime joined_at
+    }
+    games {
+        int id PK
+        string user_id FK
+        int total_score
+        date play_date
+        string location
+        datetime created_at
+        datetime updated_at
+    }
+    frames {
+        int id PK
+        int game_id FK
+        int frame_number
+        int first_roll
+        int second_roll
+        int third_roll
+        int score
+    }
 
-```bash
-$ npm install
+    users ||--o{ group_members : "joins"
+    groups ||--o{ group_members : "has"
+    users ||--o{ games : "plays"
+    games ||--o{ frames : "records"
 ```
 
-## Compile and run the project
+---
+
+## API 설계도
+
+### 1. 사용자 및 인증 (`/users`, `/email`)
+- `POST /email/send-otp` : 이메일 인증번호 발송 요청
+- `POST /email/verify-otp` : 이메일 인증번호 확인
+- `POST /users/signup` : 이메일 및 비밀번호를 통한 회원가입
+- `POST /users/login` : 이메일/비밀번호 로그인
+- `POST /users/sync` : 외부 혹은 클라이언트 로그인 후 유저 정보 DB 동기화
+- `GET /users/:id` : 내 프로필 정보 조회
+- `PATCH /users/:id` : 프로필 업데이트 (닉네임, 프로필 이미지)
+
+### 2. 게임 기록 및 통계 (`/games`)
+- `POST /games` : 신규 게임 기록 생성 (각 프레임별 점수 포함)
+- `GET /games/me/:user_id` : 유저의 전체/특정 기간 게임 목록 조회
+- `GET /games/:id/detail/:user_id` : 특정 게임의 상세 정보(프레임 상세점수 등) 조회
+- `GET /games/users/:user_id/recent` : 가장 최근에 플레이한 게임 1건 요약 조회
+- `GET /games/users/:user_id/statistics` : 유저의 볼링 통계(평균 점수, 최고 점수, 최근 10게임 등) 조회
+
+### 3. 클럽(그룹) 관리 (`/groups`)
+- `POST /groups` : 신규 클럽 생성
+- `GET /groups` : 전체 클럽 목록 조회
+- `GET /groups/me/:user_id` : 내가 가입된 클럽 목록 반환
+- `GET /groups/:id` : 특정 클럽 기본 정보 조회
+- `POST /groups/:id/join` : 특정 클럽에 가입
+- `GET /groups/:id/members` : 특정 클럽에 소속된 멤버 리스트 반환
+
+---
+
+## 프로젝트 실행 방법
 
 ```bash
-# development
-$ npm run start
+# 의존성 설치
+$ npm install
 
-# watch mode
+# 개발 모드 실행
 $ npm run start:dev
 
-# production mode
+# 프로덕션 빌드 및 실행
+$ npm run build
 $ npm run start:prod
 ```
-
-## Run tests
-
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).

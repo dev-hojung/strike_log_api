@@ -49,7 +49,7 @@ export class UsersController {
   @Patch(':id')
   updateProfile(
     @Param('id') id: string,
-    @Body() updateData: { nickname?: string; profile_image_url?: string },
+    @Body() updateData: { nickname?: string; profile_image_url?: string; phone?: string },
   ) {
     return this.usersService.updateProfile(id, updateData);
   }

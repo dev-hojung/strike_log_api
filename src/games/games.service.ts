@@ -9,6 +9,8 @@ export class GamesService {
   constructor(
     @InjectRepository(Game)
     private readonly gameRepository: Repository<Game>,
+    @InjectRepository(Frame)
+    private readonly frameRepository: Repository<Frame>,
   ) {}
 
   /**
@@ -178,5 +180,102 @@ export class GamesService {
       throw new NotFoundException('해당 게임 기록을 찾을 수 없습니다.');
     }
     return game;
+  }
+
+  /**
+   * 이번 달 프레임 통계 (스트라이크, 스페어, 오픈, 올커버 게임 수)
+   */
+  async getMonthlyFrameStats(user_id: string) {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    // 이번 달 게임 + 프레임 조회
+    const allGames = await this.gameRepository.find({
+      where: { user_id },
+      relations: ['frames'],
+      order: { play_date: 'DESC' },
+    });
+
+    const thisMonthGames = allGames.filter((game) => {
+      const d = new Date(game.play_date);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+
+    let strikes = 0;
+    let spares = 0;
+    let opens = 0;
+    let allCoverGames = 0;
+
+    for (const game of thisMonthGames) {
+      if (!game.frames || game.frames.length === 0) continue;
+
+      let gameHasOpen = false;
+
+      for (const frame of game.frames) {
+        if (frame.frame_number <= 9) {
+          // 1~9프레임
+          if (frame.first_roll === 10) {
+            strikes++;
+          } else if (
+            frame.first_roll != null &&
+            frame.second_roll != null &&
+            frame.first_roll + frame.second_roll === 10
+          ) {
+            spares++;
+          } else {
+            opens++;
+            gameHasOpen = true;
+          }
+        } else {
+          // 10프레임
+          if (frame.first_roll === 10) {
+            strikes++;
+            if (frame.second_roll === 10) {
+              strikes++;
+              if (frame.third_roll === 10) {
+                strikes++;
+              } else if (frame.third_roll != null) {
+                // 3구째는 단독 판정 불가 (보너스 투구)
+              }
+            } else if (
+              frame.second_roll != null &&
+              frame.third_roll != null
+            ) {
+              if (frame.second_roll + frame.third_roll === 10) {
+                spares++;
+              } else {
+                opens++;
+                gameHasOpen = true;
+              }
+            }
+          } else if (
+            frame.first_roll != null &&
+            frame.second_roll != null &&
+            frame.first_roll + frame.second_roll === 10
+          ) {
+            spares++;
+            if (frame.third_roll === 10) {
+              strikes++;
+            }
+          } else {
+            opens++;
+            gameHasOpen = true;
+          }
+        }
+      }
+
+      if (!gameHasOpen && game.frames.length >= 10) {
+        allCoverGames++;
+      }
+    }
+
+    return {
+      strikes,
+      spares,
+      opens,
+      allCoverGames,
+      gameCount: thisMonthGames.length,
+    };
   }
 }

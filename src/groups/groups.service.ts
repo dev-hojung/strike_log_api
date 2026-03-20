@@ -37,9 +37,19 @@ export class GroupsService {
    * 전체 클럽 리스트 조회
    */
   async getAllGroups() {
-    return this.groupRepository.find({
+    const groups = await this.groupRepository.find({
+      relations: ['members'],
       order: { created_at: 'DESC' },
     });
+
+    return groups.map((group) => ({
+      id: group.id,
+      name: group.name,
+      description: group.description,
+      cover_image_url: group.cover_image_url,
+      created_at: group.created_at,
+      member_count: group.members?.length ?? 0,
+    }));
   }
 
   /**

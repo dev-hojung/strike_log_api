@@ -44,6 +44,17 @@ export class UsersController {
   }
 
   /**
+   * 비밀번호 변경
+   */
+  @Post(':id/change-password')
+  changePassword(
+    @Param('id') id: string,
+    @Body() body: { currentPassword: string; newPassword: string },
+  ) {
+    return this.usersService.changePassword(id, body.currentPassword, body.newPassword);
+  }
+
+  /**
    * 내 정보 수정 (닉네임, 프로필 이미지 등)
    */
   @Patch(':id')

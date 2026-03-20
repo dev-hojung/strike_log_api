@@ -59,6 +59,14 @@ export class GamesController {
   }
 
   /**
+   * 이번 달 프레임 통계 (스트라이크, 스페어, 오픈, 올커버 게임 수)
+   */
+  @Get('users/:user_id/monthly-frame-stats')
+  getMonthlyFrameStats(@Param('user_id') user_id: string) {
+    return this.gamesService.getMonthlyFrameStats(user_id);
+  }
+
+  /**
    * 게임 상세 기록 조회
    */
   @Get(':id/detail/:user_id')

@@ -18,69 +18,86 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
   @WebSocketServer()
   server!: Server;
 
+  // 방별 클라이언트 소켓 관리
+  private roomClients = new Map<string, Map<string, Socket>>();
+
   constructor(private readonly gameRoomsService: GameRoomsService) {}
 
-  handleConnection(_client: Socket) {
-    // Client connected
+  handleConnection(client: Socket) {
+    console.log('[GameRooms] Client connected:', client.id);
   }
 
-  handleDisconnect(_client: Socket) {
-    // Client disconnected
+  handleDisconnect(client: Socket) {
+    console.log('[GameRooms] Client disconnected:', client.id);
+    // 연결 끊긴 클라이언트를 모든 방에서 제거
+    for (const [roomId, clients] of this.roomClients.entries()) {
+      clients.delete(client.id);
+      if (clients.size === 0) {
+        this.roomClients.delete(roomId);
+      }
+    }
   }
 
   /**
-   * 클럽 유저가 새로운 방을 생성합니다.
-   * @param data 방 생성 요청 데이터 (user_id 포함)
-   * @param client 연결된 소켓 클라이언트
+   * 방의 모든 클라이언트에게 이벤트 전송
    */
+  private emitToRoom(roomId: string, event: string, data: unknown) {
+    const clients = this.roomClients.get(roomId);
+    if (!clients) return;
+    console.log(`[GameRooms] Emitting '${event}' to ${clients.size} clients in room ${roomId}`);
+    for (const [, socket] of clients) {
+      socket.emit(event, data);
+    }
+  }
+
   @SubscribeMessage('createRoom')
   async handleCreateRoom(
-    @MessageBody() data: { user_id: string },
+    @MessageBody() data: { user_id: string; nickname?: string },
     @ConnectedSocket() client: Socket,
   ) {
+    console.log('[GameRooms] createRoom received:', JSON.stringify(data));
     try {
-      const roomId = await this.gameRoomsService.createRoom(data.user_id);
-      void client.join(roomId);
+      const roomId = await this.gameRoomsService.createRoom(data.user_id, data.nickname ?? '게스트');
+      console.log('[GameRooms] Room created:', roomId);
+
+      // 클라이언트를 방에 등록
+      if (!this.roomClients.has(roomId)) {
+        this.roomClients.set(roomId, new Map());
+      }
+      this.roomClients.get(roomId)!.set(client.id, client);
 
       const roomState = this.gameRoomsService.getRoomState(roomId);
       client.emit('roomCreated', { roomId, state: roomState });
-      return { event: 'createRoomResponse', data: { success: true, roomId } };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      return { event: 'createRoomResponse', data: { success: false, message } };
+      console.log('[GameRooms] createRoom error:', message);
+      client.emit('error', { message });
     }
   }
 
-  /**
-   * 다른 유저가 생성된 방에 참가합니다.
-   * @param data 참가 요청 데이터 (roomId, user_id 포함)
-   * @param client 연결된 소켓 클라이언트
-   */
   @SubscribeMessage('joinRoom')
   handleJoinRoom(
-    @MessageBody() data: { roomId: string; user_id: string },
+    @MessageBody() data: { roomId: string; user_id: string; nickname?: string },
     @ConnectedSocket() client: Socket,
   ) {
     try {
-      this.gameRoomsService.joinRoom(data.roomId, data.user_id);
-      void client.join(data.roomId);
+      this.gameRoomsService.joinRoom(data.roomId, data.user_id, data.nickname ?? '게스트');
+
+      // 클라이언트를 방에 등록
+      if (!this.roomClients.has(data.roomId)) {
+        this.roomClients.set(data.roomId, new Map());
+      }
+      this.roomClients.get(data.roomId)!.set(client.id, client);
 
       const roomState = this.gameRoomsService.getRoomState(data.roomId);
-      // 방에 있는 모든 유저에게 새로운 유저가 참가했음을 알림
-      this.server.to(data.roomId).emit('roomStateUpdated', roomState);
-
-      return { event: 'joinRoomResponse', data: { success: true, roomId: data.roomId } };
+      // 방의 모든 클라이언트에게 직접 전송
+      this.emitToRoom(data.roomId, 'roomStateUpdated', roomState);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      return { event: 'joinRoomResponse', data: { success: false, message } };
+      client.emit('error', { message });
     }
   }
 
-  /**
-   * 방 내 유저가 점수를 업데이트하면 같은 방의 유저들에게 브로드캐스트합니다.
-   * @param data 점수 갱신 데이터 (roomId, user_id, score 포함)
-   * @param client 연결된 소켓 클라이언트
-   */
   @SubscribeMessage('updateScore')
   handleUpdateScore(
     @MessageBody() data: { roomId: string; user_id: string; score: number },
@@ -90,30 +107,43 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
       this.gameRoomsService.updateScore(data.roomId, data.user_id, data.score);
 
       const roomState = this.gameRoomsService.getRoomState(data.roomId);
-      // 변경된 상태를 해당 방 전체 인원에게 전송
-      this.server.to(data.roomId).emit('roomStateUpdated', roomState);
+      this.emitToRoom(data.roomId, 'roomStateUpdated', roomState);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       client.emit('error', { message });
     }
   }
 
-  /**
-   * 유저가 방을 나갈 때 처리합니다.
-   * @param data 방 나가기 데이터 (roomId, user_id)
-   * @param client 연결된 소켓 클라이언트
-   */
   @SubscribeMessage('leaveRoom')
   handleLeaveRoom(
     @MessageBody() data: { roomId: string; user_id: string },
     @ConnectedSocket() client: Socket,
   ) {
     this.gameRoomsService.leaveRoom(data.roomId, data.user_id);
-    void client.leave(data.roomId);
+
+    // 클라이언트를 방에서 제거
+    this.roomClients.get(data.roomId)?.delete(client.id);
 
     const roomState = this.gameRoomsService.getRoomState(data.roomId);
     if (roomState) {
-      this.server.to(data.roomId).emit('roomStateUpdated', roomState);
+      this.emitToRoom(data.roomId, 'roomStateUpdated', roomState);
     }
+  }
+
+  @SubscribeMessage('startGame')
+  handleStartGame(
+    @MessageBody() data: { roomId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const roomState = this.gameRoomsService.getRoomState(data.roomId);
+    if (!roomState) {
+      client.emit('error', { message: '존재하지 않는 방입니다.' });
+      return;
+    }
+
+    this.emitToRoom(data.roomId, 'gameStarted', {
+      roomId: data.roomId,
+      participants: roomState.participants,
+    });
   }
 }

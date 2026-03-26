@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { GroupMember } from '../groups/entities/group-member.entity';
 
 export interface RoomParticipant {
+  nickname: string;
   score: number;
 }
 
@@ -45,7 +46,7 @@ export class GameRoomsService {
    * @param user_id 방장 유저 ID
    * @returns 생성된 방의 ID
    */
-  async createRoom(user_id: string): Promise<string> {
+  async createRoom(user_id: string, nickname: string): Promise<string> {
     const isClub = await this.isClubUser(user_id);
     if (!isClub) {
       throw new UnauthorizedException('클럽 유저만 게임 방을 생성할 수 있습니다.');
@@ -55,7 +56,7 @@ export class GameRoomsService {
     this.activeRooms.set(roomId, {
       roomId,
       hostId: user_id,
-      participants: { [user_id]: { score: 0 } },
+      participants: { [user_id]: { nickname, score: 0 } },
       createdAt: new Date(),
     });
 
@@ -67,14 +68,14 @@ export class GameRoomsService {
    * @param roomId 방 ID
    * @param user_id 참가할 유저 ID
    */
-  joinRoom(roomId: string, user_id: string): void {
+  joinRoom(roomId: string, user_id: string, nickname: string): void {
     const room = this.activeRooms.get(roomId);
     if (!room) {
       throw new Error('존재하지 않는 방입니다.');
     }
 
     if (!room.participants[user_id]) {
-      room.participants[user_id] = { score: 0 };
+      room.participants[user_id] = { nickname, score: 0 };
     }
   }
 

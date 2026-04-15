@@ -53,6 +53,26 @@ export class Game {
   @Column({ type: 'varchar', length: 100, nullable: true })
   location: string;
 
+  /**
+   * 클럽 게임 여부. 개인 게임은 false.
+   */
+  @Column({ type: 'boolean', default: false })
+  is_club_game: boolean;
+
+  /**
+   * 클럽 게임 방 코드 (7자리). 개인 게임은 null.
+   * 같은 room_id를 가진 레코드는 같은 클럽 경기의 참가자들이다.
+   */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  room_id: string | null;
+
+  /**
+   * 클럽 게임 종료 시점 본인 순위 (1-based). 개인 게임은 null.
+   * 동점자 처리는 저장 시점 클라이언트에서 결정해 전달한다.
+   */
+  @Column({ type: 'int', nullable: true })
+  club_rank: number | null;
+
   @CreateDateColumn()
   created_at: Date;
 

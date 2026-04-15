@@ -6,6 +6,16 @@ import { GroupMember } from '../groups/entities/group-member.entity';
 export interface RoomParticipant {
   nickname: string;
   score: number;
+  // 클럽 게임 통계 (실시간 순위표에서 표기). 아직 점수가 들어오지 않았으면 undefined.
+  strikes?: number;
+  spares?: number;
+  opens?: number;
+}
+
+export interface ParticipantStatsUpdate {
+  strikes?: number;
+  spares?: number;
+  opens?: number;
 }
 
 export interface GameRoomState {
@@ -80,19 +90,31 @@ export class GameRoomsService {
   }
 
   /**
-   * 게임 방 내 유저 점수 업데이트
+   * 게임 방 내 유저 점수 및 통계 업데이트
    * @param roomId 방 ID
    * @param user_id 점수를 갱신할 유저 ID
    * @param score 새로운 점수
+   * @param stats 선택 통계 (strikes/spares/opens). 제공된 필드만 갱신
    */
-  updateScore(roomId: string, user_id: string, score: number): void {
+  updateScore(
+    roomId: string,
+    user_id: string,
+    score: number,
+    stats?: ParticipantStatsUpdate,
+  ): void {
     const room = this.activeRooms.get(roomId);
     if (!room) {
       throw new Error('존재하지 않는 방입니다.');
     }
 
-    if (room.participants[user_id]) {
-      room.participants[user_id].score = score;
+    const participant = room.participants[user_id];
+    if (!participant) return;
+
+    participant.score = score;
+    if (stats) {
+      if (typeof stats.strikes === 'number') participant.strikes = stats.strikes;
+      if (typeof stats.spares === 'number') participant.spares = stats.spares;
+      if (typeof stats.opens === 'number') participant.opens = stats.opens;
     }
   }
 

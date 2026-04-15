@@ -100,11 +100,23 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
 
   @SubscribeMessage('updateScore')
   handleUpdateScore(
-    @MessageBody() data: { roomId: string; user_id: string; score: number },
+    @MessageBody()
+    data: {
+      roomId: string;
+      user_id: string;
+      score: number;
+      strikes?: number;
+      spares?: number;
+      opens?: number;
+    },
     @ConnectedSocket() client: Socket,
   ) {
     try {
-      this.gameRoomsService.updateScore(data.roomId, data.user_id, data.score);
+      this.gameRoomsService.updateScore(data.roomId, data.user_id, data.score, {
+        strikes: data.strikes,
+        spares: data.spares,
+        opens: data.opens,
+      });
 
       const roomState = this.gameRoomsService.getRoomState(data.roomId);
       this.emitToRoom(data.roomId, 'roomStateUpdated', roomState);

@@ -22,6 +22,9 @@ export class GamesController {
       play_date?: Date;
       location?: string;
       frames?: any[]; // Frame DTO 대신 any 사용 최소화를 위해 임시 배열 허용
+      is_club_game?: boolean;
+      room_id?: string | null;
+      club_rank?: number | null;
     },
   ) {
     if (!createData.user_id) {
@@ -31,6 +34,14 @@ export class GamesController {
     // 여기서는 테스트를 위해 Body에 user_id를 포함한다고 가정.
     const user_id = createData.user_id;
     return this.gamesService.createGame(user_id, createData);
+  }
+
+  /**
+   * 특정 방 코드로 저장된 클럽 게임 참가자 전원의 기록 조회
+   */
+  @Get('club/:room_id')
+  getClubGameByRoom(@Param('room_id') room_id: string) {
+    return this.gamesService.getClubGameByRoom(room_id);
   }
 
   /**

@@ -80,14 +80,8 @@ describe('GroupsController', () => {
   });
 
   describe('joinGroup', () => {
-    it('should call groupsService.joinGroup', async () => {
-      const groupId = '1';
-      const userId = 'user-uuid';
-      const result = { success: true };
-      mockGroupsService.joinGroup.mockResolvedValue(result);
-
-      expect(await controller.joinGroup(groupId, userId)).toEqual(result);
-      expect(service.joinGroup).toHaveBeenCalledWith(1, userId);
+    it('should throw GoneException (deprecated)', () => {
+      expect(() => controller.joinGroup()).toThrow();
     });
   });
 

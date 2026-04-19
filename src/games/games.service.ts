@@ -3,6 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Game } from './entities/game.entity';
 import { Frame } from './entities/frame.entity';
+import { GroupMember } from '../groups/entities/group-member.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
 
 @Injectable()
 export class GamesService {
@@ -11,11 +14,14 @@ export class GamesService {
     private readonly gameRepository: Repository<Game>,
     @InjectRepository(Frame)
     private readonly frameRepository: Repository<Frame>,
+    @InjectRepository(GroupMember)
+    private readonly groupMemberRepository: Repository<GroupMember>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
    * 새로운 볼링 게임 기록 생성
-   * 클럽 게임이면 [is_club_game], [room_id], [club_rank]를 함께 전달해 메타데이터를 보존한다.
+   * 클럽 게임이면 해당 클럽 멤버 전원에게 알림을 보낸다.
    */
   async createGame(
     user_id: string,
@@ -43,12 +49,58 @@ export class GamesService {
       started_at: createData.started_at ? new Date(createData.started_at) : null,
       ended_at: createData.ended_at ? new Date(createData.ended_at) : null,
     });
-    return this.gameRepository.save(game);
+    const saved = await this.gameRepository.save(game);
+
+    // 클럽 게임인 경우 같은 클럽 멤버들에게 알림 (비동기, 실패해도 게임 저장은 성공)
+    if (createData.is_club_game) {
+      this.notifyClubGameCreated(user_id, saved.id).catch((err) =>
+        console.error('[Games] 클럽 게임 알림 전송 실패:', err),
+      );
+    }
+
+    return saved;
+  }
+
+  /**
+   * 클럽 게임 생성 알림을 해당 클럽 멤버 전원(생성자 제외)에게 전송
+   */
+  private async notifyClubGameCreated(creatorId: string, gameId: number) {
+    // 생성자가 속한 클럽 목록
+    const creatorMemberships = await this.groupMemberRepository.find({
+      where: { user_id: creatorId },
+      relations: ['user', 'group'],
+    });
+
+    if (creatorMemberships.length === 0) return;
+
+    const creatorNickname = creatorMemberships[0].user?.nickname ?? '알 수 없는 유저';
+
+    for (const membership of creatorMemberships) {
+      const clubMembers = await this.groupMemberRepository.find({
+        where: { group_id: membership.group_id },
+      });
+
+      const recipientIds = clubMembers
+        .map((m) => m.user_id)
+        .filter((id) => id !== creatorId);
+
+      if (recipientIds.length === 0) continue;
+
+      const clubName = membership.group?.name ?? '클럽';
+
+      await this.notificationsService.createBulk(recipientIds, {
+        type: NotificationType.CLUB_GAME_CREATED,
+        title: '새로운 클럽 게임',
+        body: `${creatorNickname}님이 ${clubName}에서 새 게임을 시작했습니다.`,
+        targetId: String(gameId),
+        actorId: creatorId,
+        actorNickname: creatorNickname,
+      });
+    }
   }
 
   /**
    * 같은 방 코드(room_id)로 저장된 모든 참가자의 클럽 게임 기록 조회
-   * 저장이 완료된 참가자만 포함되며, total_score 내림차순으로 정렬된다.
    */
   async getClubGameByRoom(room_id: string) {
     const games = await this.gameRepository.find({
@@ -93,7 +145,6 @@ export class GamesService {
       }
     });
 
-    // 최근 10경기는 최신순으로 정렬되어 있으므로 처음 10개를 가져와서, 차트에 그리기 위해 오래된 순으로 역순 정렬
     const recentTrend = allGames
       .slice(0, 10)
       .reverse()
@@ -102,28 +153,23 @@ export class GamesService {
         date: game.play_date,
       }));
 
-    // 이번 달 / 지난 달 에버리지 비교 (지난달 대비 상승률 계산)
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
-    // 지난 달의 연도/월 계산 (1월이면 전년 12월로)
     const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
     const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
 
-    // 이번 달 경기 필터링
     const thisMonthGames = allGames.filter((game) => {
       const d = new Date(game.play_date);
       return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     });
 
-    // 지난 달 경기 필터링
     const lastMonthGames = allGames.filter((game) => {
       const d = new Date(game.play_date);
       return d.getMonth() === lastMonth && d.getFullYear() === lastMonthYear;
     });
 
-    // 월별 에버리지 및 변동률 계산 (4가지 시나리오 구분)
     const thisMonthAvg =
       thisMonthGames.length > 0
         ? Math.round(
@@ -140,7 +186,6 @@ export class GamesService {
     let monthlyTrend: Record<string, unknown>;
 
     if (thisMonthAvg !== null && lastMonthAvg !== null && lastMonthAvg > 0) {
-      // 양쪽 데이터 모두 있음 → 퍼센트 변동률 계산
       monthlyTrend = {
         status: 'both',
         currentMonthAvg: thisMonthAvg,
@@ -149,20 +194,17 @@ export class GamesService {
         currentMonthGameCount: thisMonthGames.length,
       };
     } else if (thisMonthAvg !== null && lastMonthAvg === null) {
-      // 이번 달만 데이터 있음
       monthlyTrend = {
         status: 'current_only',
         currentMonthAvg: thisMonthAvg,
         currentMonthGameCount: thisMonthGames.length,
       };
     } else if (thisMonthAvg === null && lastMonthAvg !== null) {
-      // 지난달만 데이터 있음
       monthlyTrend = {
         status: 'last_only',
         lastMonthAvg: lastMonthAvg,
       };
     } else {
-      // 양쪽 모두 데이터 없음
       monthlyTrend = { status: 'none' };
     }
 
@@ -205,7 +247,7 @@ export class GamesService {
   async getGameDetail(id: number, user_id: string) {
     const game = await this.gameRepository.findOne({
       where: { id, user_id },
-      relations: ['frames'], // 프레임 기록 함께 반환
+      relations: ['frames'],
     });
 
     if (!game) {
@@ -222,7 +264,6 @@ export class GamesService {
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
-    // 이번 달 게임 + 프레임 조회
     const allGames = await this.gameRepository.find({
       where: { user_id },
       relations: ['frames'],
@@ -246,7 +287,6 @@ export class GamesService {
 
       for (const frame of game.frames) {
         if (frame.frame_number <= 9) {
-          // 1~9프레임
           if (frame.first_roll === 10) {
             strikes++;
           } else if (
@@ -260,15 +300,12 @@ export class GamesService {
             gameHasOpen = true;
           }
         } else {
-          // 10프레임
           if (frame.first_roll === 10) {
             strikes++;
             if (frame.second_roll === 10) {
               strikes++;
               if (frame.third_roll === 10) {
                 strikes++;
-              } else if (frame.third_roll != null) {
-                // 3구째는 단독 판정 불가 (보너스 투구)
               }
             } else if (
               frame.second_roll != null &&

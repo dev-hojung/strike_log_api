@@ -55,3 +55,4 @@ pids
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 .omg/
+strike-log-app-firebase-adminsdk-fbsvc-f69718ff08.json

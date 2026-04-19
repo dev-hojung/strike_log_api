@@ -1,10 +1,22 @@
 import { Controller, Post, Body, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { EmailService } from './email.service';
 
+@ApiTags('email')
 @Controller('email')
 export class EmailController {
   constructor(private readonly emailService: EmailService) {}
 
+  @ApiOperation({ summary: '이메일로 OTP 인증번호 발송' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['email'],
+      properties: {
+        email: { type: 'string', example: 'user@example.com' },
+      },
+    },
+  })
   @Post('send-otp')
   async sendOtp(@Body('email') email: string) {
     if (!email) {
@@ -14,6 +26,17 @@ export class EmailController {
     return { success: true, message: '인증번호가 발송되었습니다.' };
   }
 
+  @ApiOperation({ summary: 'OTP 인증번호 검증' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['email', 'code'],
+      properties: {
+        email: { type: 'string', example: 'user@example.com' },
+        code: { type: 'string', example: '123456' },
+      },
+    },
+  })
   @Post('verify-otp')
   @HttpCode(HttpStatus.OK)
   async verifyOtp(@Body() body: { email: string; code: string }) {

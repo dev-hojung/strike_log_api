@@ -27,6 +27,8 @@ export class GamesService {
       is_club_game?: boolean;
       room_id?: string | null;
       club_rank?: number | null;
+      started_at?: string | null;
+      ended_at?: string | null;
     },
   ) {
     const game = this.gameRepository.create({
@@ -34,10 +36,12 @@ export class GamesService {
       total_score: createData.total_score,
       play_date: createData.play_date || new Date(),
       location: createData.location,
-      frames: createData.frames, // typeorm이 Frame 엔티티들을 cascade=true로 함께 생성해 줌
+      frames: createData.frames,
       is_club_game: createData.is_club_game ?? false,
       room_id: createData.room_id ?? null,
       club_rank: createData.club_rank ?? null,
+      started_at: createData.started_at ? new Date(createData.started_at) : null,
+      ended_at: createData.ended_at ? new Date(createData.ended_at) : null,
     });
     return this.gameRepository.save(game);
   }

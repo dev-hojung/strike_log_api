@@ -21,6 +21,10 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
   // 방별 클라이언트 소켓 관리
   private roomClients = new Map<string, Map<string, Socket>>();
 
+  // client.id → { userId, roomId } 매핑.
+  // disconnect 시 어떤 유저가 어떤 방에서 나갔는지 역추적해 participants도 정리.
+  private clientUserMap = new Map<string, { userId: string; roomId: string }>();
+
   constructor(private readonly gameRoomsService: GameRoomsService) {}
 
   handleConnection(client: Socket) {
@@ -29,7 +33,23 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
 
   handleDisconnect(client: Socket) {
     console.log('[GameRooms] Client disconnected:', client.id);
-    // 연결 끊긴 클라이언트를 모든 방에서 제거
+
+    // 1) client → user/room 매핑으로 participants에서도 제거 (좀비 방지)
+    const mapping = this.clientUserMap.get(client.id);
+    if (mapping) {
+      const { userId, roomId } = mapping;
+      this.gameRoomsService.leaveRoom(roomId, userId);
+      console.log(`[GameRooms] Removed disconnected user ${userId} from room ${roomId}`);
+
+      // 남은 참가자에게 상태 업데이트 전파
+      const roomState = this.gameRoomsService.getRoomState(roomId);
+      if (roomState) {
+        this.emitToRoom(roomId, 'roomStateUpdated', roomState);
+      }
+      this.clientUserMap.delete(client.id);
+    }
+
+    // 2) roomClients(소켓 추적)에서도 제거
     for (const [roomId, clients] of this.roomClients.entries()) {
       clients.delete(client.id);
       if (clients.size === 0) {
@@ -60,11 +80,12 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
       const roomId = await this.gameRoomsService.createRoom(data.user_id, data.nickname ?? '게스트');
       console.log('[GameRooms] Room created:', roomId);
 
-      // 클라이언트를 방에 등록
+      // 클라이언트를 방에 등록 + disconnect 역추적용 매핑
       if (!this.roomClients.has(roomId)) {
         this.roomClients.set(roomId, new Map());
       }
       this.roomClients.get(roomId)!.set(client.id, client);
+      this.clientUserMap.set(client.id, { userId: data.user_id, roomId });
 
       const roomState = this.gameRoomsService.getRoomState(roomId);
       client.emit('roomCreated', { roomId, state: roomState });
@@ -83,11 +104,12 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
     try {
       this.gameRoomsService.joinRoom(data.roomId, data.user_id, data.nickname ?? '게스트');
 
-      // 클라이언트를 방에 등록
+      // 클라이언트를 방에 등록 + disconnect 역추적용 매핑
       if (!this.roomClients.has(data.roomId)) {
         this.roomClients.set(data.roomId, new Map());
       }
       this.roomClients.get(data.roomId)!.set(client.id, client);
+      this.clientUserMap.set(client.id, { userId: data.user_id, roomId: data.roomId });
 
       const roomState = this.gameRoomsService.getRoomState(data.roomId);
       // 방의 모든 클라이언트에게 직접 전송
@@ -133,8 +155,9 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
   ) {
     this.gameRoomsService.leaveRoom(data.roomId, data.user_id);
 
-    // 클라이언트를 방에서 제거
+    // 클라이언트를 방에서 제거 + disconnect 매핑도 정리
     this.roomClients.get(data.roomId)?.delete(client.id);
+    this.clientUserMap.delete(client.id);
 
     const roomState = this.gameRoomsService.getRoomState(data.roomId);
     if (roomState) {

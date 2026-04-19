@@ -73,6 +73,20 @@ export class Game {
   @Column({ type: 'int', nullable: true })
   club_rank: number | null;
 
+  /**
+   * 실제 게임 시작 시각 (UTC). 클라이언트가 FrameEntryPage에 진입한 시점.
+   * 기존 레코드와의 호환을 위해 nullable. play_date(날짜만)보다 정밀한 시간 정보 제공.
+   */
+  @Column({ type: 'datetime', nullable: true })
+  started_at: Date | null;
+
+  /**
+   * 실제 게임 종료(저장) 시각 (UTC). 클라이언트가 "저장" 버튼을 누른 시점.
+   * started_at과 함께 사용하면 플레이 소요 시간 계산 가능.
+   */
+  @Column({ type: 'datetime', nullable: true })
+  ended_at: Date | null;
+
   @CreateDateColumn()
   created_at: Date;
 

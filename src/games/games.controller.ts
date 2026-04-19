@@ -25,6 +25,8 @@ export class GamesController {
       is_club_game?: boolean;
       room_id?: string | null;
       club_rank?: number | null;
+      started_at?: string | null;
+      ended_at?: string | null;
     },
   ) {
     if (!createData.user_id) {

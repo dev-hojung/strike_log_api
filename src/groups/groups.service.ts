@@ -10,9 +10,16 @@ import { Repository } from 'typeorm';
 import { Group } from './entities/group.entity';
 import { GroupMember, GroupRole } from './entities/group-member.entity';
 import { GroupJoinRequest, JoinRequestStatus } from './entities/group-join-request.entity';
+import {
+  GroupCreationRequest,
+  CreationRequestStatus,
+  CreationRejectReason,
+} from './entities/group-creation-request.entity';
 import { Game } from '../games/entities/game.entity';
+import { User } from '../users/entities/user.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
+import { isPlatformAdmin, platformAdminIds } from '../common/admin';
 
 @Injectable()
 export class GroupsService {
@@ -23,10 +30,181 @@ export class GroupsService {
     private readonly groupMemberRepository: Repository<GroupMember>,
     @InjectRepository(GroupJoinRequest)
     private readonly joinRequestRepository: Repository<GroupJoinRequest>,
+    @InjectRepository(GroupCreationRequest)
+    private readonly creationRequestRepository: Repository<GroupCreationRequest>,
     @InjectRepository(Game)
     private readonly gameRepository: Repository<Game>,
     private readonly notificationsService: NotificationsService,
   ) {}
+
+  // ---------- 클럽 생성 신청 플로우 ----------
+
+  /**
+   * 클럽 생성 신청. 관리자들에게 푸시 발송.
+   */
+  async createCreationRequest(params: {
+    requester_id: string;
+    name: string;
+    description?: string;
+    cover_image_url?: string;
+  }) {
+    if (!params.name?.trim()) {
+      throw new BadRequestException('클럽 이름이 필요합니다.');
+    }
+    // 동일 유저가 PENDING 상태로 이미 신청한 건이 있으면 차단
+    const existing = await this.creationRequestRepository.findOne({
+      where: {
+        requester_id: params.requester_id,
+        status: CreationRequestStatus.PENDING,
+      },
+    });
+    if (existing) {
+      throw new ConflictException('이미 심사 중인 신청이 있습니다.');
+    }
+
+    const request = this.creationRequestRepository.create({
+      requester_id: params.requester_id,
+      name: params.name.trim(),
+      description: params.description ?? null,
+      cover_image_url: params.cover_image_url ?? null,
+      status: CreationRequestStatus.PENDING,
+    });
+    const saved = await this.creationRequestRepository.save(request);
+
+    // 관리자 모두에게 알림
+    const admins = platformAdminIds();
+    if (admins.length > 0) {
+      await this.notificationsService.createBulk(admins, {
+        type: NotificationType.CLUB_CREATION_REQUEST,
+        title: '새 클럽 생성 신청',
+        body: `"${saved.name}" 생성 신청이 접수되었습니다.`,
+        targetId: String(saved.id),
+        actorId: params.requester_id,
+      });
+    }
+    return saved;
+  }
+
+  /**
+   * 내 신청 목록 (pending + 최근 이력)
+   */
+  async listMyCreationRequests(user_id: string) {
+    return this.creationRequestRepository.find({
+      where: { requester_id: user_id },
+      order: { created_at: 'DESC' },
+    });
+  }
+
+  /**
+   * 관리자: 신청 목록 조회 (상태 필터 가능)
+   */
+  async listCreationRequestsForAdmin(
+    admin_user_id: string,
+    status?: CreationRequestStatus,
+  ) {
+    if (!isPlatformAdmin(admin_user_id)) {
+      throw new ForbiddenException('관리자 권한이 없습니다.');
+    }
+    const where = status ? { status } : {};
+    return this.creationRequestRepository.find({
+      where,
+      order: { created_at: 'DESC' },
+    });
+  }
+
+  /**
+   * 관리자: 신청 승인 → groups 레코드 생성 + 신청자 ADMIN 가입 + 알림
+   */
+  async approveCreationRequest(request_id: number, admin_user_id: string) {
+    if (!isPlatformAdmin(admin_user_id)) {
+      throw new ForbiddenException('관리자 권한이 없습니다.');
+    }
+    const req = await this.creationRequestRepository.findOne({
+      where: { id: request_id },
+    });
+    if (!req) throw new NotFoundException('신청을 찾을 수 없습니다.');
+    if (req.status !== CreationRequestStatus.PENDING) {
+      throw new BadRequestException('이미 처리된 신청입니다.');
+    }
+
+    const group = await this.createGroup(req.requester_id, {
+      name: req.name,
+      description: req.description ?? undefined,
+      cover_image_url: req.cover_image_url ?? undefined,
+    });
+
+    req.status = CreationRequestStatus.APPROVED;
+    req.approved_group_id = group.id;
+    await this.creationRequestRepository.save(req);
+
+    await this.notificationsService.create({
+      userId: req.requester_id,
+      type: NotificationType.CLUB_CREATION_APPROVED,
+      title: '클럽 생성 승인',
+      body: `"${req.name}" 클럽이 승인되어 생성되었습니다.`,
+      targetId: String(group.id),
+      actorId: admin_user_id,
+    });
+
+    return { request: req, group };
+  }
+
+  /**
+   * 관리자: 신청 반려
+   */
+  async rejectCreationRequest(
+    request_id: number,
+    admin_user_id: string,
+    reason: CreationRejectReason,
+  ) {
+    if (!isPlatformAdmin(admin_user_id)) {
+      throw new ForbiddenException('관리자 권한이 없습니다.');
+    }
+    if (!Object.values(CreationRejectReason).includes(reason)) {
+      throw new BadRequestException('유효하지 않은 반려 사유입니다.');
+    }
+    const req = await this.creationRequestRepository.findOne({
+      where: { id: request_id },
+    });
+    if (!req) throw new NotFoundException('신청을 찾을 수 없습니다.');
+    if (req.status !== CreationRequestStatus.PENDING) {
+      throw new BadRequestException('이미 처리된 신청입니다.');
+    }
+
+    req.status = CreationRequestStatus.REJECTED;
+    req.reject_reason = reason;
+    await this.creationRequestRepository.save(req);
+
+    await this.notificationsService.create({
+      userId: req.requester_id,
+      type: NotificationType.CLUB_CREATION_REJECTED,
+      title: '클럽 생성 반려',
+      body: `"${req.name}" 클럽 생성 신청이 반려되었습니다.`,
+      targetId: String(req.id),
+      actorId: admin_user_id,
+    });
+
+    return req;
+  }
+
+  /**
+   * 신청자 본인이 pending 상태 신청 취소
+   */
+  async cancelCreationRequest(request_id: number, user_id: string) {
+    const req = await this.creationRequestRepository.findOne({
+      where: { id: request_id },
+    });
+    if (!req) throw new NotFoundException('신청을 찾을 수 없습니다.');
+    if (req.requester_id !== user_id) {
+      throw new ForbiddenException('본인 신청만 취소할 수 있습니다.');
+    }
+    if (req.status !== CreationRequestStatus.PENDING) {
+      throw new BadRequestException('취소할 수 없는 상태입니다.');
+    }
+    req.status = CreationRequestStatus.CANCELLED;
+    await this.creationRequestRepository.save(req);
+    return req;
+  }
 
   /**
    * 새로운 클럽 생성 (생성자는 ADMIN 권한 부여)

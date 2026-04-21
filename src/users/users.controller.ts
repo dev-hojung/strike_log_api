@@ -59,8 +59,15 @@ export class UsersController {
   @ApiOperation({ summary: '유저 프로필 조회' })
   @ApiParam({ name: 'id', description: '유저 ID', example: 'uuid-1234' })
   @Get(':id')
-  getProfile(@Param('id') id: string) {
-    return this.usersService.getProfile(id);
+  async getProfile(@Param('id') id: string) {
+    const profile = await this.usersService.getProfile(id);
+    // env ADMIN_USER_IDS 목록 기준으로 플랫폼 관리자 여부를 주입.
+    // 동적 import로 순환 의존 없이 common 유틸 사용.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { isPlatformAdmin } = require('../common/admin') as {
+      isPlatformAdmin: (uid: string) => boolean;
+    };
+    return { ...profile, is_platform_admin: isPlatformAdmin(id) };
   }
 
   /**

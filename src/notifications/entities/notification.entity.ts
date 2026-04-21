@@ -16,6 +16,9 @@ export enum NotificationType {
   CLUB_JOIN_REQUEST = 'club_join_request',
   CLUB_JOIN_APPROVED = 'club_join_approved',
   CLUB_JOIN_REJECTED = 'club_join_rejected',
+  CLUB_CREATION_REQUEST = 'club_creation_request',
+  CLUB_CREATION_APPROVED = 'club_creation_approved',
+  CLUB_CREATION_REJECTED = 'club_creation_rejected',
 }
 
 /**

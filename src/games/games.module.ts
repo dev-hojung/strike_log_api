@@ -5,11 +5,12 @@ import { GamesController } from './games.controller';
 import { Game } from './entities/game.entity';
 import { Frame } from './entities/frame.entity';
 import { GroupMember } from '../groups/entities/group-member.entity';
+import { Group } from '../groups/entities/group.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Game, Frame, GroupMember]),
+    TypeOrmModule.forFeature([Game, Frame, GroupMember, Group]),
     NotificationsModule,
   ],
   controllers: [GamesController],

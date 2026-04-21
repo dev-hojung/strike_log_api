@@ -74,6 +74,24 @@ export class Group {
   @Column({ type: 'datetime', nullable: true })
   trial_expires_at: Date | null;
 
+  /**
+   * D-3 만료 예정 알림 전송 여부. cron에서 중복 발송 방지.
+   */
+  @Column({ type: 'boolean', default: false })
+  reminder_d3_sent: boolean;
+
+  /**
+   * D-1 만료 예정 알림 전송 여부.
+   */
+  @Column({ type: 'boolean', default: false })
+  reminder_d1_sent: boolean;
+
+  /**
+   * 만료 당일 알림 전송 여부.
+   */
+  @Column({ type: 'boolean', default: false })
+  reminder_expired_sent: boolean;
+
   @CreateDateColumn()
   created_at: Date;
 

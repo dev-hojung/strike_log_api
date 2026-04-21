@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, GoneException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Game } from './entities/game.entity';
 import { Frame } from './entities/frame.entity';
 import { GroupMember } from '../groups/entities/group-member.entity';
+import { Group, SubscriptionStatus } from '../groups/entities/group.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
 
@@ -16,8 +17,40 @@ export class GamesService {
     private readonly frameRepository: Repository<Frame>,
     @InjectRepository(GroupMember)
     private readonly groupMemberRepository: Repository<GroupMember>,
+    @InjectRepository(Group)
+    private readonly groupRepository: Repository<Group>,
     private readonly notificationsService: NotificationsService,
   ) {}
+
+  /**
+   * 클럽 게임 생성 허용 여부 검증.
+   * 유저가 속한 모든 클럽이 EXPIRED면 GoneException.
+   * 하나라도 TRIAL/ACTIVE면 허용.
+   */
+  private async _assertClubGameAllowed(user_id: string): Promise<void> {
+    const memberships = await this.groupMemberRepository.find({
+      where: { user_id },
+    });
+    if (memberships.length === 0) {
+      // 클럽에 소속되지 않았는데 클럽 게임을 만들려는 경우: 서비스 레벨에서 막을지는
+      // 기존 정책을 따름 (알림 전송만 누락됨). 여기서는 허용.
+      return;
+    }
+    const groupIds = memberships.map((m) => m.group_id);
+    const groups = await this.groupRepository.find({
+      where: { id: In(groupIds) },
+    });
+    const hasActive = groups.some(
+      (g) =>
+        g.subscription_status === SubscriptionStatus.ACTIVE ||
+        g.subscription_status === SubscriptionStatus.TRIAL,
+    );
+    if (!hasActive) {
+      throw new GoneException(
+        '소속된 모든 클럽의 체험판이 만료되어 새 클럽 게임을 생성할 수 없습니다.',
+      );
+    }
+  }
 
   /**
    * 새로운 볼링 게임 기록 생성
@@ -37,6 +70,12 @@ export class GamesService {
       ended_at?: string | null;
     },
   ) {
+    // 클럽 게임이면 체험판 만료 여부 확인: 유저가 속한 클럽 중 하나라도
+    // active/trial이어야 허용. 전부 expired면 GoneException.
+    if (createData.is_club_game) {
+      await this._assertClubGameAllowed(user_id);
+    }
+
     const game = this.gameRepository.create({
       user_id,
       total_score: createData.total_score,

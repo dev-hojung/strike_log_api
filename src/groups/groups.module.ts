@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GroupsService } from './groups.service';
 import { GroupsController } from './groups.controller';
+import { TrialReminderService } from './trial-reminder.service';
 import { Group } from './entities/group.entity';
 import { GroupMember } from './entities/group-member.entity';
 import { GroupJoinRequest } from './entities/group-join-request.entity';
@@ -21,7 +22,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     NotificationsModule,
   ],
   controllers: [GroupsController],
-  providers: [GroupsService],
+  providers: [GroupsService, TrialReminderService],
   exports: [GroupsService],
 })
 export class GroupsModule {}

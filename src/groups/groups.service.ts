@@ -92,12 +92,13 @@ export class GroupsService implements OnModuleInit {
   async listMyCreationRequests(user_id: string) {
     return this.creationRequestRepository.find({
       where: { requester_id: user_id },
+      relations: ['requester'],
       order: { created_at: 'DESC' },
     });
   }
 
   /**
-   * 관리자: 신청 목록 조회 (상태 필터 가능)
+   * 관리자: 신청 목록 조회 (상태 필터 가능). 요청자 정보(닉네임/이메일)를 함께 반환.
    */
   async listCreationRequestsForAdmin(
     admin_user_id: string,
@@ -109,6 +110,7 @@ export class GroupsService implements OnModuleInit {
     const where = status ? { status } : {};
     return this.creationRequestRepository.find({
       where,
+      relations: ['requester'],
       order: { created_at: 'DESC' },
     });
   }

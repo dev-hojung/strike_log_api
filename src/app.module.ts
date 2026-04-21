@@ -27,10 +27,16 @@ import { NotificationsModule } from './notifications/notifications.module';
         host: configService.get<string>('DB_HOST', 'localhost'),
         port: configService.get<number>('DB_PORT', 3306),
         username: configService.get<string>('DB_USERNAME', 'root'),
-        password: configService.get<string>('DB_PASSWORD', 'likaid12!@'),
+        password: configService.get<string>('DB_PASSWORD', ''),
         database: configService.get<string>('DB_DATABASE', 'strike_log'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: true, // 개발 환경에서만 사용
+        migrations: [__dirname + '/migrations/*{.ts,.js}'],
+        migrationsTableName: 'typeorm_migrations',
+        // synchronize는 개발 환경에서만 env TYPEORM_SYNCHRONIZE=true로 on. 기본 off.
+        synchronize:
+          configService.get<string>('TYPEORM_SYNCHRONIZE') === 'true',
+        // 기동 시 미적용 마이그레이션 자동 실행
+        migrationsRun: true,
       }),
     }),
     UsersModule,

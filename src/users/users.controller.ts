@@ -1,7 +1,10 @@
 import { LoginUserDto } from './dto/login-user.dto';
-import { Controller, Get, Post, Body, Patch, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiBody } from '@nestjs/swagger';
 import { UsersService } from './users.service';
+import { Public } from '../auth/public.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/jwt.strategy';
 
 @ApiTags('users')
 @Controller('users')
@@ -12,6 +15,7 @@ export class UsersController {
    * 이메일/비밀번호 로그인
    */
   @ApiOperation({ summary: '이메일/비밀번호 로그인' })
+  @Public()
   @Post('login')
   async login(@Body() body: LoginUserDto) {
     return this.usersService.login(body.email, body.password);
@@ -29,6 +33,7 @@ export class UsersController {
       },
     },
   })
+  @Public()
   @Post('signup')
   async signup(@Body() body: { email: string; password?: string; nickname?: string }) {
     return this.usersService.signup(body.email, body.password, body.nickname);
@@ -48,6 +53,7 @@ export class UsersController {
       },
     },
   })
+  @Public()
   @Post('sync')
   syncUser(@Body() body: { id: string; email: string }) {
     return this.usersService.syncUser(body.id, body.email);
@@ -59,14 +65,19 @@ export class UsersController {
   @ApiOperation({ summary: '유저 프로필 조회' })
   @ApiParam({ name: 'id', description: '유저 ID', example: 'uuid-1234' })
   @Get(':id')
-  async getProfile(@Param('id') id: string) {
-    const profile = await this.usersService.getProfile(id);
-    // env ADMIN_USER_IDS 목록 기준으로 플랫폼 관리자 여부를 주입.
-    // 동적 import로 순환 의존 없이 common 유틸 사용.
+  async getProfile(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    // 남의 프로필 접근 차단. 관리자는 예외 허용.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { isPlatformAdmin } = require('../common/admin') as {
       isPlatformAdmin: (uid: string) => boolean;
     };
+    if (user.id !== id && !isPlatformAdmin(user.id)) {
+      throw new ForbiddenException('다른 사용자의 프로필을 조회할 수 없습니다.');
+    }
+    const profile = await this.usersService.getProfile(id);
     return { ...profile, is_platform_admin: isPlatformAdmin(id) };
   }
 
@@ -89,7 +100,11 @@ export class UsersController {
   changePassword(
     @Param('id') id: string,
     @Body() body: { currentPassword: string; newPassword: string },
+    @CurrentUser() user: AuthenticatedUser,
   ) {
+    if (user.id !== id) {
+      throw new ForbiddenException('본인만 비밀번호를 변경할 수 있습니다.');
+    }
     return this.usersService.changePassword(id, body.currentPassword, body.newPassword);
   }
 
@@ -112,7 +127,11 @@ export class UsersController {
   updateProfile(
     @Param('id') id: string,
     @Body() updateData: { nickname?: string; profile_image_url?: string; phone?: string },
+    @CurrentUser() user: AuthenticatedUser,
   ) {
+    if (user.id !== id) {
+      throw new ForbiddenException('본인만 프로필을 수정할 수 있습니다.');
+    }
     return this.usersService.updateProfile(id, updateData);
   }
 }

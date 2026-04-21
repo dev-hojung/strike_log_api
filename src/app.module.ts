@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthModule } from './auth/auth.module';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { UsersModule } from './users/users.module';
 import { GroupsModule } from './groups/groups.module';
 import { GamesModule } from './games/games.module';
@@ -39,6 +42,7 @@ import { NotificationsModule } from './notifications/notifications.module';
         migrationsRun: true,
       }),
     }),
+    AuthModule,
     UsersModule,
     GroupsModule,
     GamesModule,
@@ -47,6 +51,10 @@ import { NotificationsModule } from './notifications/notifications.module';
     NotificationsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // 전역 JWT 인증 가드. @Public()이 붙은 라우트만 무인증 허용.
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+  ],
 })
 export class AppModule {}

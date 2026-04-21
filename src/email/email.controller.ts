@@ -1,8 +1,13 @@
 import { Controller, Post, Body, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { EmailService } from './email.service';
+import { Public } from '../auth/public.decorator';
 
+/**
+ * 회원가입·비밀번호 재설정 플로우에서 쓰이므로 전부 인증 없이 호출 가능.
+ */
 @ApiTags('email')
+@Public()
 @Controller('email')
 export class EmailController {
   constructor(private readonly emailService: EmailService) {}

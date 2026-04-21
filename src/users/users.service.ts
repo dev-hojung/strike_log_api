@@ -5,17 +5,30 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { JwtService } from '@nestjs/jwt';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { User } from './entities/user.entity';
+import { JwtPayload } from '../auth/jwt.strategy';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly jwtService: JwtService,
   ) {}
+
+  /**
+   * 유저 레코드로부터 JWT 발급. 응답에 access_token + 기본 프로필을 함께 담는다.
+   */
+  private issueToken(user: User) {
+    const payload: JwtPayload = { sub: user.id, email: user.email };
+    const access_token = this.jwtService.sign(payload);
+    const { password: _omit, ...safe } = user;
+    return { access_token, user: safe };
+  }
 
   /**
    * 이메일과 비밀번호를 사용하여 회원가입을 진행합니다.
@@ -49,7 +62,8 @@ export class UsersService {
       nickname: nickname || email.split('@')[0], // 닉네임 미입력 시 이메일 아이디 사용
     });
 
-    return this.userRepository.save(user);
+    const saved = await this.userRepository.save(user);
+    return this.issueToken(saved);
   }
 
   /**
@@ -74,9 +88,7 @@ export class UsersService {
       throw new UnauthorizedException('비밀번호를 입력해주세요.');
     }
 
-    // 보안을 위해 비밀번호 제외하고 반환
-    const { password: _, ...result } = user;
-    return result;
+    return this.issueToken(user);
   }
 
   async syncUser(id: string, email: string) {

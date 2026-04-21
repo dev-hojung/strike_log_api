@@ -24,8 +24,9 @@ export class NotificationsService {
     token: string,
     platform: string,
   ): Promise<void> {
-    await this.fcmTokenRepository.save(
-      this.fcmTokenRepository.create({ token, userId, platform }),
+    await this.fcmTokenRepository.upsert(
+      { token, userId, platform },
+      { conflictPaths: ['token'], skipUpdateIfNoValuesChanged: true },
     );
   }
 

@@ -9,6 +9,16 @@ import {
 import type { GroupMember } from './group-member.entity';
 
 /**
+ * 구독/체험판 상태
+ */
+export enum SubscriptionStatus {
+  TRIAL = 'trial',
+  ACTIVE = 'active',
+  EXPIRED = 'expired',
+  CANCELLED = 'cancelled',
+}
+
+/**
  * 볼링 클럽(그룹) 엔티티
  */
 @Entity('groups')
@@ -39,6 +49,30 @@ export class Group {
    */
   @OneToMany('GroupMember', 'group', { cascade: true })
   members: GroupMember[];
+
+  // ── 체험판/구독 ──
+  /**
+   * 현재 구독 상태. 체험판(trial) / 정식(active) / 만료(expired) / 해지(cancelled).
+   * 관리자 계정이 생성한 클럽은 `active`로 고정.
+   */
+  @Column({
+    type: 'enum',
+    enum: SubscriptionStatus,
+    default: SubscriptionStatus.TRIAL,
+  })
+  subscription_status: SubscriptionStatus;
+
+  /**
+   * 체험판 시작 시각. `active`로 시작한 클럽은 null.
+   */
+  @Column({ type: 'datetime', nullable: true })
+  trial_started_at: Date | null;
+
+  /**
+   * 체험판 만료 시각. 보통 `trial_started_at + 7일`. active 클럽은 null.
+   */
+  @Column({ type: 'datetime', nullable: true })
+  trial_expires_at: Date | null;
 
   @CreateDateColumn()
   created_at: Date;

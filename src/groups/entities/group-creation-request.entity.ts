@@ -47,7 +47,7 @@ export class GroupCreationRequest {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', length: 500, nullable: true })
   cover_image_url: string | null;
 
   @Column({

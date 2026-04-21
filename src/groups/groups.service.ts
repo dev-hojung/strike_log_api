@@ -4,10 +4,11 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Group } from './entities/group.entity';
+import { Group, SubscriptionStatus } from './entities/group.entity';
 import { GroupMember, GroupRole } from './entities/group-member.entity';
 import { GroupJoinRequest, JoinRequestStatus } from './entities/group-join-request.entity';
 import {
@@ -22,7 +23,7 @@ import { NotificationType } from '../notifications/entities/notification.entity'
 import { isPlatformAdmin, platformAdminIds } from '../common/admin';
 
 @Injectable()
-export class GroupsService {
+export class GroupsService implements OnModuleInit {
   constructor(
     @InjectRepository(Group)
     private readonly groupRepository: Repository<Group>,
@@ -207,10 +208,33 @@ export class GroupsService {
   }
 
   /**
-   * 새로운 클럽 생성 (생성자는 ADMIN 권한 부여)
+   * 새로운 클럽 생성 (생성자는 ADMIN 권한 부여).
+   * 플랫폼 관리자가 직접 만든 클럽은 곧바로 `active`, 그 외는 7일 체험판.
    */
   async createGroup(user_id: string, createData: Partial<Group>) {
-    const group = this.groupRepository.create(createData);
+    const isCreatorPlatformAdmin = isPlatformAdmin(user_id);
+
+    let subscriptionOverrides: Partial<Group>;
+    if (isCreatorPlatformAdmin) {
+      subscriptionOverrides = {
+        subscription_status: SubscriptionStatus.ACTIVE,
+        trial_started_at: null,
+        trial_expires_at: null,
+      };
+    } else {
+      const now = new Date();
+      const expires = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      subscriptionOverrides = {
+        subscription_status: SubscriptionStatus.TRIAL,
+        trial_started_at: now,
+        trial_expires_at: expires,
+      };
+    }
+
+    const group = this.groupRepository.create({
+      ...createData,
+      ...subscriptionOverrides,
+    });
     await this.groupRepository.save(group);
 
     const member = this.groupMemberRepository.create({
@@ -220,6 +244,61 @@ export class GroupsService {
     });
     await this.groupMemberRepository.save(member);
 
+    return group;
+  }
+
+  /**
+   * 기존 Group row들의 체험판 필드를 backfill.
+   * 서비스 부팅 시 1회 실행. 이미 채워진 row는 건너뜀.
+   */
+  async onModuleInit() {
+    const rows = await this.groupRepository.find({
+      where: { subscription_status: SubscriptionStatus.TRIAL },
+      relations: ['members'],
+    });
+    for (const group of rows) {
+      // 이미 trial_expires_at이 있으면 건너뜀 (새로 생성된 신규 row)
+      if (group.trial_expires_at) continue;
+
+      // ADMIN 멤버 중 플랫폼 관리자가 있으면 active로 승격
+      const hasAdminCreator = (group.members ?? [])
+        .filter((m) => m.role === GroupRole.ADMIN)
+        .some((m) => isPlatformAdmin(m.user_id));
+
+      if (hasAdminCreator) {
+        group.subscription_status = SubscriptionStatus.ACTIVE;
+        group.trial_started_at = null;
+        group.trial_expires_at = null;
+      } else {
+        // 생성일 기준 + 7일로 설정. 이미 7일 지났으면 expired.
+        const created = group.created_at ?? new Date();
+        const expires = new Date(created.getTime() + 7 * 24 * 60 * 60 * 1000);
+        group.trial_started_at = created;
+        group.trial_expires_at = expires;
+        group.subscription_status =
+          expires.getTime() < Date.now()
+            ? SubscriptionStatus.EXPIRED
+            : SubscriptionStatus.TRIAL;
+      }
+      await this.groupRepository.save(group);
+    }
+  }
+
+  /**
+   * 만료 여부를 확인해 필요 시 status를 expired로 업데이트한다.
+   * 읽기 경로(getGroupDetail, getMyGroups)에서 호출해 지연 일관성을 보장.
+   */
+  private async _maybeExpireTrial(group: Group): Promise<Group> {
+    if (
+      group.subscription_status === SubscriptionStatus.TRIAL &&
+      group.trial_expires_at &&
+      group.trial_expires_at.getTime() < Date.now()
+    ) {
+      group.subscription_status = SubscriptionStatus.EXPIRED;
+      await this.groupRepository.update(group.id, {
+        subscription_status: SubscriptionStatus.EXPIRED,
+      });
+    }
     return group;
   }
 
@@ -253,6 +332,9 @@ export class GroupsService {
       order: { joined_at: 'DESC' },
     });
 
+    // 만료 갱신을 병렬 처리
+    await Promise.all(list.map((m) => this._maybeExpireTrial(m.group)));
+
     return list.map((m) => {
       const group = m.group;
       const members = group.members.map((gm) => ({
@@ -273,6 +355,9 @@ export class GroupsService {
         memberCount: members.length,
         memberSummary: members.slice(0, 3),
         leader_id: admin?.user_id ?? null,
+        subscription_status: group.subscription_status,
+        trial_started_at: group.trial_started_at,
+        trial_expires_at: group.trial_expires_at,
       };
     });
   }
@@ -283,6 +368,7 @@ export class GroupsService {
   async getGroupDetail(id: number) {
     const group = await this.groupRepository.findOne({ where: { id } });
     if (!group) throw new NotFoundException('클럽을 찾을 수 없습니다.');
+    await this._maybeExpireTrial(group);
     return group;
   }
 

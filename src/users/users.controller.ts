@@ -65,12 +65,9 @@ export class UsersController {
   @ApiOperation({ summary: '유저 프로필 조회' })
   @ApiParam({ name: 'id', description: '유저 ID', example: 'uuid-1234' })
   @Get(':id')
-  async getProfile(
-    @Param('id') id: string,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
+  async getProfile(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     // 남의 프로필 접근 차단. 관리자는 예외 허용.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+
     const { isPlatformAdmin } = require('../common/admin') as {
       isPlatformAdmin: (uid: string) => boolean;
     };

@@ -9,10 +9,7 @@ import { Group } from '../groups/entities/group.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Game, Frame, GroupMember, Group]),
-    NotificationsModule,
-  ],
+  imports: [TypeOrmModule.forFeature([Game, Frame, GroupMember, Group]), NotificationsModule],
   controllers: [GamesController],
   providers: [GamesService],
 })

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
+import type { AuthenticatedUser } from '../auth/jwt.strategy';
 
 describe('UsersController', () => {
   let controller: UsersController;
@@ -63,24 +64,33 @@ describe('UsersController', () => {
   });
 
   describe('getProfile', () => {
-    it('should call usersService.getProfile', async () => {
+    it('본인 프로필 조회는 service.getProfile을 호출한다', async () => {
       const userId = 'uuid';
+      const authedUser: AuthenticatedUser = {
+        id: userId,
+        email: 'test@example.com',
+      };
       const result = { id: userId, email: 'test@example.com' };
       mockUsersService.getProfile.mockResolvedValue(result);
 
-      expect(await controller.getProfile(userId)).toEqual(result);
+      const res = await controller.getProfile(userId, authedUser);
+      expect(res).toEqual({ ...result, is_platform_admin: false });
       expect(service.getProfile).toHaveBeenCalledWith(userId);
     });
   });
 
   describe('updateProfile', () => {
-    it('should call usersService.updateProfile', async () => {
+    it('본인 프로필 수정은 service.updateProfile을 호출한다', async () => {
       const userId = 'uuid';
+      const authedUser: AuthenticatedUser = {
+        id: userId,
+        email: 'test@example.com',
+      };
       const updateDto = { nickname: 'newNickname' };
       const result = { id: userId, ...updateDto };
       mockUsersService.updateProfile.mockResolvedValue(result);
 
-      expect(await controller.updateProfile(userId, updateDto)).toEqual(result);
+      expect(await controller.updateProfile(userId, updateDto, authedUser)).toEqual(result);
       expect(service.updateProfile).toHaveBeenCalledWith(userId, updateDto);
     });
   });

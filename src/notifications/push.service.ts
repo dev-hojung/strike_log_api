@@ -34,9 +34,7 @@ export class PushService implements OnModuleInit {
     try {
       const saPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
       if (saPath) {
-        const abs = path.isAbsolute(saPath)
-          ? saPath
-          : path.join(process.cwd(), saPath);
+        const abs = path.isAbsolute(saPath) ? saPath : path.join(process.cwd(), saPath);
         const raw = fs.readFileSync(abs, 'utf8');
         const json = JSON.parse(raw);
         admin.initializeApp({ credential: admin.credential.cert(json) });
@@ -100,9 +98,7 @@ export class PushService implements OnModuleInit {
         await this.fcmTokenRepository.delete({ token: In(invalid) });
         this.logger.log(`Removed ${invalid.length} invalid FCM tokens`);
       }
-      this.logger.log(
-        `FCM sent success=${res.successCount} failure=${res.failureCount}`,
-      );
+      this.logger.log(`FCM sent success=${res.successCount} failure=${res.failureCount}`);
     } catch (e) {
       this.logger.error(`FCM send failed: ${(e as Error).message}`);
     }

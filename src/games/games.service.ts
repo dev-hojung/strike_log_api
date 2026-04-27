@@ -119,9 +119,7 @@ export class GamesService {
         where: { group_id: membership.group_id },
       });
 
-      const recipientIds = clubMembers
-        .map((m) => m.user_id)
-        .filter((id) => id !== creatorId);
+      const recipientIds = clubMembers.map((m) => m.user_id).filter((id) => id !== creatorId);
 
       if (recipientIds.length === 0) continue;
 
@@ -346,10 +344,7 @@ export class GamesService {
               if (frame.third_roll === 10) {
                 strikes++;
               }
-            } else if (
-              frame.second_roll != null &&
-              frame.third_roll != null
-            ) {
+            } else if (frame.second_roll != null && frame.third_roll != null) {
               if (frame.second_roll + frame.third_roll === 10) {
                 spares++;
               } else {

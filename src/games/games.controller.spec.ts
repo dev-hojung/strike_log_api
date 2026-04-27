@@ -32,23 +32,23 @@ describe('GamesController', () => {
   });
 
   describe('createGame', () => {
-    it('should call gamesService.createGame', async () => {
+    it('인증된 유저 id로 service.createGame이 호출된다', async () => {
+      const userId = 'user-uuid';
       const createGameDto = {
-        user_id: 'user-uuid',
         total_score: 200,
         play_date: new Date(),
         frames: [],
       };
-      const result = { id: 1, ...createGameDto };
+      const result = { id: 1, user_id: userId, ...createGameDto };
       mockGamesService.createGame.mockResolvedValue(result);
 
-      expect(await controller.createGame(createGameDto)).toEqual(result);
-      expect(service.createGame).toHaveBeenCalledWith('user-uuid', createGameDto);
+      expect(await controller.createGame(userId, createGameDto)).toEqual(result);
+      expect(service.createGame).toHaveBeenCalledWith(userId, createGameDto);
     });
   });
 
   describe('getMyGames', () => {
-    it('should call gamesService.getMyGames', async () => {
+    it('인증된 유저 id로 service.getMyGames가 호출된다', async () => {
       const userId = 'user-uuid';
       const result = [{ id: 1, total_score: 180 }];
       mockGamesService.getMyGames.mockResolvedValue(result);
@@ -59,7 +59,7 @@ describe('GamesController', () => {
   });
 
   describe('getGameDetail', () => {
-    it('should call gamesService.getGameDetail', async () => {
+    it('인증된 유저 id로 service.getGameDetail이 호출된다', async () => {
       const gameId = '1';
       const userId = 'user-uuid';
       const result = { id: 1, total_score: 180, frames: [] };

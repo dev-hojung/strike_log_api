@@ -114,11 +114,7 @@ export class UsersService {
   /**
    * 비밀번호 변경
    */
-  async changePassword(
-    id: string,
-    currentPassword: string,
-    newPassword: string,
-  ) {
+  async changePassword(id: string, currentPassword: string, newPassword: string) {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException('유저를 찾을 수 없습니다.');

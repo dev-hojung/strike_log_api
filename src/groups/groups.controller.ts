@@ -1,37 +1,28 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Delete,
-  Body,
-  Param,
-  Query,
-  BadRequestException,
-  GoneException,
-} from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiParam, ApiBody, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, Param, Query, GoneException } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiParam, ApiBody, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { GroupsService } from './groups.service';
 import {
   CreationRequestStatus,
   CreationRejectReason,
 } from './entities/group-creation-request.entity';
 import { isPlatformAdmin } from '../common/admin';
+import { CurrentUser } from '../auth/current-user.decorator';
 
 @ApiTags('groups')
+@ApiBearerAuth('access-token')
 @Controller('groups')
 export class GroupsController {
   constructor(private readonly groupsService: GroupsService) {}
 
   /**
-   * 새로운 클럽을 생성합니다.
+   * 새로운 클럽을 생성합니다. (플랫폼 관리자 전용 — 일반 유저는 creation-requests 사용)
    */
-  @ApiOperation({ summary: '새 클럽 생성' })
+  @ApiOperation({ summary: '새 클럽 생성 (플랫폼 관리자 전용)' })
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['user_id', 'name'],
+      required: ['name'],
       properties: {
-        user_id: { type: 'string', example: 'uuid-1234' },
         name: { type: 'string', example: '볼링 클럽 A' },
         description: { type: 'string', example: '주말 볼링 모임' },
         cover_image_url: { type: 'string', example: 'https://example.com/cover.png' },
@@ -40,25 +31,21 @@ export class GroupsController {
   })
   @Post()
   createGroup(
+    @CurrentUser('id') userId: string,
     @Body()
     body: {
-      user_id: string;
       name: string;
       description?: string;
       cover_image_url?: string;
     },
   ) {
     // 일반 유저는 POST /groups/creation-requests를 사용. 관리자만 즉시 생성 허용.
-    if (!isPlatformAdmin(body.user_id)) {
+    if (!isPlatformAdmin(userId)) {
       throw new GoneException(
         '직접 생성은 지원되지 않습니다. POST /groups/creation-requests를 사용해주세요.',
       );
     }
-    if (!body.user_id) {
-      throw new BadRequestException('user_id가 필요합니다.');
-    }
-    const { user_id, ...createData } = body;
-    return this.groupsService.createGroup(user_id, createData);
+    return this.groupsService.createGroup(userId, body);
   }
 
   @ApiOperation({ summary: '전체 클럽 목록 조회' })
@@ -68,10 +55,9 @@ export class GroupsController {
   }
 
   @ApiOperation({ summary: '내가 속한 클럽 목록 조회' })
-  @ApiParam({ name: 'user_id', description: '유저 ID', example: 'uuid-1234' })
-  @Get('me/:user_id')
-  getMyGroups(@Param('user_id') user_id: string) {
-    return this.groupsService.getMyGroups(user_id);
+  @Get('me')
+  getMyGroups(@CurrentUser('id') userId: string) {
+    return this.groupsService.getMyGroups(userId);
   }
 
   // ──────────────────────────────────────
@@ -84,9 +70,8 @@ export class GroupsController {
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['user_id', 'name'],
+      required: ['name'],
       properties: {
-        user_id: { type: 'string', example: 'uuid-1234' },
         name: { type: 'string', example: '볼링 클럽 A' },
         description: { type: 'string' },
         cover_image_url: { type: 'string' },
@@ -95,19 +80,16 @@ export class GroupsController {
   })
   @Post('creation-requests')
   createCreationRequest(
+    @CurrentUser('id') userId: string,
     @Body()
     body: {
-      user_id: string;
       name: string;
       description?: string;
       cover_image_url?: string;
     },
   ) {
-    if (!body.user_id) {
-      throw new BadRequestException('user_id가 필요합니다.');
-    }
     return this.groupsService.createCreationRequest({
-      requester_id: body.user_id,
+      requester_id: userId,
       name: body.name,
       description: body.description,
       cover_image_url: body.cover_image_url,
@@ -115,14 +97,12 @@ export class GroupsController {
   }
 
   @ApiOperation({ summary: '내 클럽 생성 신청 목록' })
-  @ApiParam({ name: 'user_id', description: '유저 ID' })
-  @Get('creation-requests/me/:user_id')
-  getMyCreationRequests(@Param('user_id') user_id: string) {
-    return this.groupsService.listMyCreationRequests(user_id);
+  @Get('creation-requests/me')
+  getMyCreationRequests(@CurrentUser('id') userId: string) {
+    return this.groupsService.listMyCreationRequests(userId);
   }
 
   @ApiOperation({ summary: '[ADMIN] 클럽 생성 신청 목록 조회' })
-  @ApiQuery({ name: 'admin_user_id', description: '관리자 user_id' })
   @ApiQuery({
     name: 'status',
     required: false,
@@ -130,26 +110,17 @@ export class GroupsController {
   })
   @Get('creation-requests')
   listCreationRequestsForAdmin(
-    @Query('admin_user_id') admin_user_id: string,
+    @CurrentUser('id') userId: string,
     @Query('status') status?: CreationRequestStatus,
   ) {
-    return this.groupsService.listCreationRequestsForAdmin(
-      admin_user_id,
-      status,
-    );
+    return this.groupsService.listCreationRequestsForAdmin(userId, status);
   }
 
   @ApiOperation({ summary: '[ADMIN] 클럽 생성 신청 승인' })
   @ApiParam({ name: 'id', description: '신청 ID' })
   @Post('creation-requests/:id/approve')
-  approveCreationRequest(
-    @Param('id') id: string,
-    @Body() body: { admin_user_id: string },
-  ) {
-    if (!body.admin_user_id) {
-      throw new BadRequestException('admin_user_id가 필요합니다.');
-    }
-    return this.groupsService.approveCreationRequest(+id, body.admin_user_id);
+  approveCreationRequest(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.groupsService.approveCreationRequest(+id, userId);
   }
 
   @ApiOperation({ summary: '[ADMIN] 클럽 생성 신청 반려' })
@@ -157,9 +128,8 @@ export class GroupsController {
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['admin_user_id', 'reason'],
+      required: ['reason'],
       properties: {
-        admin_user_id: { type: 'string' },
         reason: {
           type: 'string',
           enum: Object.values(CreationRejectReason),
@@ -170,29 +140,17 @@ export class GroupsController {
   @Post('creation-requests/:id/reject')
   rejectCreationRequest(
     @Param('id') id: string,
-    @Body() body: { admin_user_id: string; reason: CreationRejectReason },
+    @CurrentUser('id') userId: string,
+    @Body() body: { reason: CreationRejectReason },
   ) {
-    if (!body.admin_user_id) {
-      throw new BadRequestException('admin_user_id가 필요합니다.');
-    }
-    return this.groupsService.rejectCreationRequest(
-      +id,
-      body.admin_user_id,
-      body.reason,
-    );
+    return this.groupsService.rejectCreationRequest(+id, userId, body.reason);
   }
 
   @ApiOperation({ summary: '본인 클럽 생성 신청 취소' })
   @ApiParam({ name: 'id', description: '신청 ID' })
   @Post('creation-requests/:id/cancel')
-  cancelCreationRequest(
-    @Param('id') id: string,
-    @Body() body: { user_id: string },
-  ) {
-    if (!body.user_id) {
-      throw new BadRequestException('user_id가 필요합니다.');
-    }
-    return this.groupsService.cancelCreationRequest(+id, body.user_id);
+  cancelCreationRequest(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.groupsService.cancelCreationRequest(+id, userId);
   }
 
   // ──────────────────────────────────────
@@ -228,9 +186,7 @@ export class GroupsController {
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['user_id'],
       properties: {
-        user_id: { type: 'string', example: 'uuid-1234' },
         message: { type: 'string', example: '가입하고 싶습니다!' },
       },
     },
@@ -238,12 +194,10 @@ export class GroupsController {
   @Post(':id/join-requests')
   createJoinRequest(
     @Param('id') id: string,
-    @Body() body: { user_id: string; message?: string },
+    @CurrentUser('id') userId: string,
+    @Body() body: { message?: string },
   ) {
-    if (!body.user_id) {
-      throw new BadRequestException('user_id가 필요합니다.');
-    }
-    return this.groupsService.createJoinRequest(+id, body.user_id, body.message);
+    return this.groupsService.createJoinRequest(+id, userId, body?.message);
   }
 
   /**
@@ -252,11 +206,8 @@ export class GroupsController {
   @ApiOperation({ summary: '가입 신청 목록 조회 (클럽장 전용)' })
   @ApiParam({ name: 'id', description: '클럽 ID', example: '1' })
   @Get(':id/join-requests')
-  getJoinRequests(
-    @Param('id') id: string,
-    @Body('user_id') user_id: string,
-  ) {
-    return this.groupsService.getJoinRequests(+id, user_id);
+  getJoinRequests(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.groupsService.getJoinRequests(+id, userId);
   }
 
   /**
@@ -269,9 +220,9 @@ export class GroupsController {
   approveJoinRequest(
     @Param('id') id: string,
     @Param('requestId') requestId: string,
-    @Body('user_id') user_id: string,
+    @CurrentUser('id') userId: string,
   ) {
-    return this.groupsService.approveJoinRequest(+id, +requestId, user_id);
+    return this.groupsService.approveJoinRequest(+id, +requestId, userId);
   }
 
   /**
@@ -284,9 +235,9 @@ export class GroupsController {
   rejectJoinRequest(
     @Param('id') id: string,
     @Param('requestId') requestId: string,
-    @Body('user_id') user_id: string,
+    @CurrentUser('id') userId: string,
   ) {
-    return this.groupsService.rejectJoinRequest(+id, +requestId, user_id);
+    return this.groupsService.rejectJoinRequest(+id, +requestId, userId);
   }
 
   @ApiOperation({ summary: '클럽 멤버 목록 조회' })

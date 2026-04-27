@@ -19,11 +19,7 @@ export class NotificationsService {
    * FCM 토큰 등록 (upsert).
    * 동일 token이 이미 다른 userId로 저장돼 있으면 소유권 이전.
    */
-  async registerFcmToken(
-    userId: string,
-    token: string,
-    platform: string,
-  ): Promise<void> {
+  async registerFcmToken(userId: string, token: string, platform: string): Promise<void> {
     await this.fcmTokenRepository.upsert(
       { token, userId, platform },
       { conflictPaths: ['token'], skipUpdateIfNoValuesChanged: true },
@@ -143,9 +139,6 @@ export class NotificationsService {
    * 전체 읽음 처리
    */
   async markAllAsRead(userId: string): Promise<void> {
-    await this.notificationRepository.update(
-      { userId, isRead: false },
-      { isRead: true },
-    );
+    await this.notificationRepository.update({ userId, isRead: false }, { isRead: true });
   }
 }

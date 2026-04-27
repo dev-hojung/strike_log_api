@@ -12,13 +12,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      Group,
-      GroupMember,
-      GroupJoinRequest,
-      GroupCreationRequest,
-      Game,
-    ]),
+    TypeOrmModule.forFeature([Group, GroupMember, GroupJoinRequest, GroupCreationRequest, Game]),
     NotificationsModule,
   ],
   controllers: [GroupsController],

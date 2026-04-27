@@ -14,6 +14,15 @@ async function bootstrap() {
     .setTitle('Strike Log API')
     .setDescription('볼링 클럽 관리 API')
     .setVersion('1.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        in: 'header',
+      },
+      'access-token',
+    )
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);

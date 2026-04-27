@@ -35,15 +35,20 @@ describe('GroupsController', () => {
   });
 
   describe('createGroup', () => {
-    it('should call groupsService.createGroup', async () => {
-      const createGroupDto = { user_id: 'user-uuid', name: 'Test Group' };
-      const result = { id: 1, ...createGroupDto };
+    it('플랫폼 관리자가 호출하면 service.createGroup으로 위임된다', async () => {
+      // 플랫폼 관리자 환경변수 설정
+      process.env.ADMIN_USER_IDS = 'admin-uuid';
+      const body = { name: 'Test Group' };
+      const result = { id: 1, ...body };
       mockGroupsService.createGroup.mockResolvedValue(result);
 
-      expect(await controller.createGroup(createGroupDto)).toEqual(result);
-      expect(service.createGroup).toHaveBeenCalledWith('user-uuid', {
-        name: 'Test Group',
-      });
+      expect(await controller.createGroup('admin-uuid', body)).toEqual(result);
+      expect(service.createGroup).toHaveBeenCalledWith('admin-uuid', body);
+    });
+
+    it('일반 유저가 호출하면 GoneException을 던진다', () => {
+      process.env.ADMIN_USER_IDS = 'admin-uuid';
+      expect(() => controller.createGroup('regular-uuid', { name: 'Test Group' })).toThrow();
     });
   });
 
@@ -58,7 +63,7 @@ describe('GroupsController', () => {
   });
 
   describe('getMyGroups', () => {
-    it('should call groupsService.getMyGroups', async () => {
+    it('인증된 유저 id로 service.getMyGroups가 호출된다', async () => {
       const userId = 'user-uuid';
       const result = [{ id: 1, name: 'My Group' }];
       mockGroupsService.getMyGroups.mockResolvedValue(result);

@@ -100,10 +100,7 @@ export class GroupsService implements OnModuleInit {
   /**
    * 관리자: 신청 목록 조회 (상태 필터 가능). 요청자 정보(닉네임/이메일)를 함께 반환.
    */
-  async listCreationRequestsForAdmin(
-    admin_user_id: string,
-    status?: CreationRequestStatus,
-  ) {
+  async listCreationRequestsForAdmin(admin_user_id: string, status?: CreationRequestStatus) {
     if (!isPlatformAdmin(admin_user_id)) {
       throw new ForbiddenException('관리자 권한이 없습니다.');
     }
@@ -278,9 +275,7 @@ export class GroupsService implements OnModuleInit {
         group.trial_started_at = created;
         group.trial_expires_at = expires;
         group.subscription_status =
-          expires.getTime() < Date.now()
-            ? SubscriptionStatus.EXPIRED
-            : SubscriptionStatus.TRIAL;
+          expires.getTime() < Date.now() ? SubscriptionStatus.EXPIRED : SubscriptionStatus.TRIAL;
       }
       await this.groupRepository.save(group);
     }

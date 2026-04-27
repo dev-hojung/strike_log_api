@@ -36,8 +36,7 @@ import { NotificationsModule } from './notifications/notifications.module';
         migrations: [__dirname + '/migrations/*{.ts,.js}'],
         migrationsTableName: 'typeorm_migrations',
         // synchronize는 개발 환경에서만 env TYPEORM_SYNCHRONIZE=true로 on. 기본 off.
-        synchronize:
-          configService.get<string>('TYPEORM_SYNCHRONIZE') === 'true',
+        synchronize: configService.get<string>('TYPEORM_SYNCHRONIZE') === 'true',
         // 기동 시 미적용 마이그레이션 자동 실행
         migrationsRun: true,
       }),

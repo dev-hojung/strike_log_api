@@ -25,9 +25,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(configService: ConfigService) {
     const secret = configService.get<string>('JWT_SECRET');
     if (!secret) {
-      throw new UnauthorizedException(
-        'JWT_SECRET 환경변수가 설정되지 않았습니다.',
-      );
+      throw new UnauthorizedException('JWT_SECRET 환경변수가 설정되지 않았습니다.');
     }
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),

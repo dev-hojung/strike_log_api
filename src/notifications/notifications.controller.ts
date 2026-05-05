@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Logger, Param, Post } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -7,6 +7,8 @@ import { CurrentUser } from '../auth/current-user.decorator';
 @ApiBearerAuth('access-token')
 @Controller('notifications')
 export class NotificationsController {
+  private readonly logger = new Logger(NotificationsController.name);
+
   constructor(private readonly notificationsService: NotificationsService) {}
 
   /**
@@ -70,6 +72,9 @@ export class NotificationsController {
     @CurrentUser('id') userId: string,
     @Body() body: { token: string; platform: string },
   ) {
+    this.logger.log(
+      `[fcm-token register] user=${userId} platform=${body.platform} token=${body.token?.slice(0, 16)}...`,
+    );
     await this.notificationsService.registerFcmToken(userId, body.token, body.platform);
     return { ok: true };
   }

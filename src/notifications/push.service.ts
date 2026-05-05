@@ -62,20 +62,47 @@ export class PushService implements OnModuleInit {
     userIds: string[],
     payload: { title: string; body: string; data?: Record<string, string> },
   ): Promise<void> {
-    if (!this.enabled || userIds.length === 0) return;
+    if (!this.enabled) {
+      this.logger.warn(
+        `sendToUsers skipped (admin disabled). users=${userIds.join(',')} title="${payload.title}"`,
+      );
+      return;
+    }
+    if (userIds.length === 0) return;
 
     const rows = await this.fcmTokenRepository.find({
       where: { userId: In(userIds) },
     });
     const tokens = rows.map((r) => r.token);
-    if (tokens.length === 0) return;
+    this.logger.log(
+      `sendToUsers users=${userIds.join(',')} tokens=${tokens.length} title="${payload.title}" data=${JSON.stringify(payload.data ?? {})}`,
+    );
+    if (tokens.length === 0) {
+      this.logger.warn(`No FCM tokens for users=${userIds.join(',')} — push not sent.`);
+      return;
+    }
 
     try {
       const res = await admin.messaging().sendEachForMulticast({
         tokens,
         notification: { title: payload.title, body: payload.body },
         data: payload.data ?? {},
-        android: { priority: 'high' },
+        android: {
+          priority: 'high',
+          notification: {
+            // 클라이언트에서 만든 high-importance 채널과 일치시켜야
+            // 백그라운드 푸시도 heads-up으로 뜬다.
+            channelId: 'strike_log_default_v2',
+            notificationPriority: 'PRIORITY_HIGH',
+            defaultSound: true,
+            defaultVibrateTimings: true,
+          },
+        },
+        apns: {
+          payload: {
+            aps: { sound: 'default' },
+          },
+        },
       });
 
       // 무효 토큰 정리

@@ -1,6 +1,19 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
 
+// FCM(googleapis.com) outbound 시 일부 네트워크에서 IPv6가 ETIMEDOUT으로 떨어진다.
+// Node 20+의 Happy Eyeballs(autoSelectFamily=true)가 IPv4/IPv6를 병렬로 붙어서
+// IPv6 timeout이 AggregateError에 같이 묶여 Firebase Admin 호출 전체가 실패함.
+// IPv4 우선 + 자동 패밀리 선택 해제로 IPv4 단일 경로로 강제.
+import * as dns from 'node:dns';
+import * as net from 'node:net';
+dns.setDefaultResultOrder('ipv4first');
+// Node 20.0 도입, 20.5에서 setDefaultAutoSelectFamily 추가
+if (typeof (net as any).setDefaultAutoSelectFamily === 'function') {
+  (net as any).setDefaultAutoSelectFamily(false);
+}
+
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -9,6 +22,16 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   // Flutter 앱 또는 외부 클라이언트와의 연동을 위해 CORS를 활성화합니다.
   app.enableCors();
+
+  // [DEBUG] 인입 요청 로그 (메서드/경로/상태/소요시간). 진단 끝나면 제거 가능.
+  const httpLogger = new Logger('HTTP');
+  app.use((req: any, res: any, next: any) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      httpLogger.log(`${req.method} ${req.originalUrl} → ${res.statusCode} (${Date.now() - start}ms)`);
+    });
+    next();
+  });
 
   const config = new DocumentBuilder()
     .setTitle('Strike Log API')

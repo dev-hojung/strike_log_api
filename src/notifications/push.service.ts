@@ -82,6 +82,7 @@ export class PushService implements OnModuleInit {
       return;
     }
 
+    const start = Date.now();
     try {
       const res = await admin.messaging().sendEachForMulticast({
         tokens,
@@ -93,9 +94,13 @@ export class PushService implements OnModuleInit {
             // 클라이언트에서 만든 high-importance 채널과 일치시켜야
             // 백그라운드 푸시도 heads-up으로 뜬다.
             channelId: 'strike_log_default_v2',
-            notificationPriority: 'PRIORITY_HIGH',
+            priority: 'high',
             defaultSound: true,
             defaultVibrateTimings: true,
+            // Android 자동 그룹화는 4개 이상 누적되면 후속 알림에 SILENT을 붙인다.
+            // 동일 tag로 통일해 신규 알림이 기존 알림을 대체하도록 강제.
+            // (앱 내부 알림 페이지엔 DB 기반으로 모든 이력이 남아있음)
+            tag: 'strike_log_default_v2',
           },
         },
         apns: {
@@ -125,9 +130,13 @@ export class PushService implements OnModuleInit {
         await this.fcmTokenRepository.delete({ token: In(invalid) });
         this.logger.log(`Removed ${invalid.length} invalid FCM tokens`);
       }
-      this.logger.log(`FCM sent success=${res.successCount} failure=${res.failureCount}`);
+      this.logger.log(
+        `FCM sent success=${res.successCount} failure=${res.failureCount} elapsed=${Date.now() - start}ms`,
+      );
     } catch (e) {
-      this.logger.error(`FCM send failed: ${(e as Error).message}`);
+      this.logger.error(
+        `FCM send failed after ${Date.now() - start}ms: ${(e as Error).message}`,
+      );
     }
   }
 }

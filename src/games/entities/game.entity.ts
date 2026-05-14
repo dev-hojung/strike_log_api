@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import type { Frame } from './frame.entity';
+import type { GameSeries } from './game-series.entity';
 
 /**
  * 볼링 게임 기록 엔티티
@@ -86,6 +87,23 @@ export class Game {
    */
   @Column({ type: 'datetime', nullable: true })
   ended_at: Date | null;
+
+  /**
+   * 시리즈 ID. 단일 게임은 null. 시리즈 진행 중이면 game_series.id를 가리킨다.
+   */
+  @Column({ type: 'int', nullable: true })
+  series_id: number | null;
+
+  @ManyToOne('GameSeries', 'games', { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'series_id' })
+  series: GameSeries | null;
+
+  /**
+   * 시리즈 내 게임 순번 (1-based). 단일 게임은 null.
+   * 예: 3게임 시리즈의 두 번째 게임 → 2.
+   */
+  @Column({ type: 'int', nullable: true })
+  series_index: number | null;
 
   @CreateDateColumn()
   created_at: Date;

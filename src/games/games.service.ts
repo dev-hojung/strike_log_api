@@ -68,6 +68,8 @@ export class GamesService {
       club_rank?: number | null;
       started_at?: string | null;
       ended_at?: string | null;
+      series_id?: number | null;
+      series_index?: number | null;
     },
   ) {
     // 클럽 게임이면 체험판 만료 여부 확인: 유저가 속한 클럽 중 하나라도
@@ -87,6 +89,8 @@ export class GamesService {
       club_rank: createData.club_rank ?? null,
       started_at: createData.started_at ? new Date(createData.started_at) : null,
       ended_at: createData.ended_at ? new Date(createData.ended_at) : null,
+      series_id: createData.series_id ?? null,
+      series_index: createData.series_index ?? null,
     });
     const saved = await this.gameRepository.save(game);
 

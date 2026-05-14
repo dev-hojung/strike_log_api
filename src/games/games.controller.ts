@@ -42,6 +42,8 @@ export class GamesController {
         club_rank: { type: 'number', nullable: true, example: 1 },
         started_at: { type: 'string', nullable: true, example: '2024-04-19T14:00:00Z' },
         ended_at: { type: 'string', nullable: true, example: '2024-04-19T14:30:00Z' },
+        series_id: { type: 'number', nullable: true, example: 12, description: '시리즈 ID(시리즈 모드일 때)' },
+        series_index: { type: 'number', nullable: true, example: 2, description: '시리즈 내 게임 순번(1-based)' },
       },
     },
   })
@@ -59,6 +61,8 @@ export class GamesController {
       club_rank?: number | null;
       started_at?: string | null;
       ended_at?: string | null;
+      series_id?: number | null;
+      series_index?: number | null;
     },
   ) {
     return this.gamesService.createGame(userId, createData);

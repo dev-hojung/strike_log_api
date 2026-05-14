@@ -7,7 +7,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Group, SubscriptionStatus } from './entities/group.entity';
 import { GroupMember, GroupRole } from './entities/group-member.entity';
 import { GroupJoinRequest, JoinRequestStatus } from './entities/group-join-request.entity';
@@ -367,6 +367,103 @@ export class GroupsService implements OnModuleInit {
     if (!group) throw new NotFoundException('클럽을 찾을 수 없습니다.');
     await this._maybeExpireTrial(group);
     return group;
+  }
+
+  /**
+   * 클럽 리더보드: 멤버 전원의 누적 평균 / 최고 점수 / 경기 수를 집계하고
+   * 평균 점수 내림차순으로 정렬해 반환한다.
+   * 본인의 위치(myRank)도 함께 동봉.
+   *
+   * 정책:
+   *  - 본인이 해당 클럽 멤버여야 조회 가능 (플랫폼 관리자 제외)
+   *  - 경기 수 0인 멤버는 entries 하단에 위치 (avg 0 처리)
+   */
+  async getClubLeaderboard(groupId: number, requesterId: string) {
+    // 멤버십 검증
+    const myMembership = await this.groupMemberRepository.findOne({
+      where: { group_id: groupId, user_id: requesterId },
+    });
+    if (!myMembership && !isPlatformAdmin(requesterId)) {
+      throw new ForbiddenException('클럽 멤버만 리더보드를 볼 수 있습니다.');
+    }
+
+    // 멤버 + 유저 정보
+    const members = await this.groupMemberRepository.find({
+      where: { group_id: groupId },
+      relations: ['user'],
+    });
+    if (members.length === 0) {
+      return {
+        metric: 'avg',
+        totalParticipants: 0,
+        myRank: null,
+        entries: [],
+      };
+    }
+
+    const userIds = members.map((m) => m.user_id);
+    // 모든 멤버의 게임을 한 번에 조회해 메모리에서 집계 (N+1 회피).
+    const games = await this.gameRepository.find({
+      where: { user_id: In(userIds) },
+    });
+
+    const statsByUser = new Map<
+      string,
+      { sum: number; highest: number; count: number }
+    >();
+    for (const g of games) {
+      const cur =
+        statsByUser.get(g.user_id) ?? { sum: 0, highest: 0, count: 0 };
+      cur.sum += g.total_score;
+      if (g.total_score > cur.highest) cur.highest = g.total_score;
+      cur.count++;
+      statsByUser.set(g.user_id, cur);
+    }
+
+    type Entry = {
+      userId: string;
+      nickname: string;
+      avg: number;
+      highest: number;
+      gameCount: number;
+    };
+
+    const entries: Entry[] = members.map((m) => {
+      const s = statsByUser.get(m.user_id) ?? { sum: 0, highest: 0, count: 0 };
+      return {
+        userId: m.user_id,
+        nickname: m.user?.nickname ?? '알 수 없음',
+        avg: s.count > 0 ? Number((s.sum / s.count).toFixed(1)) : 0,
+        highest: s.highest,
+        gameCount: s.count,
+      };
+    });
+
+    // 정렬: 경기 있는 멤버 우선, 그 안에서 avg desc, 동률 시 highest desc.
+    entries.sort((a, b) => {
+      const aHas = a.gameCount > 0 ? 1 : 0;
+      const bHas = b.gameCount > 0 ? 1 : 0;
+      if (aHas !== bHas) return bHas - aHas;
+      if (b.avg !== a.avg) return b.avg - a.avg;
+      return b.highest - a.highest;
+    });
+
+    const ranked = entries.map((e, i) => ({ rank: i + 1, ...e }));
+    const me = ranked.find((e) => e.userId === requesterId);
+
+    return {
+      metric: 'avg',
+      totalParticipants: ranked.length,
+      myRank: me
+        ? {
+            rank: me.rank,
+            avg: me.avg,
+            highest: me.highest,
+            gameCount: me.gameCount,
+          }
+        : null,
+      entries: ranked,
+    };
   }
 
   // ──────────────────────────────────────

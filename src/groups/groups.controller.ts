@@ -162,6 +162,20 @@ export class GroupsController {
     return this.groupsService.getGroupDetail(+id);
   }
 
+  @ApiOperation({
+    summary: '클럽 리더보드 조회 (평균 점수 내림차순)',
+    description:
+      '클럽 멤버 전원의 누적 평균/최고 점수/경기 수를 집계해 정렬한 리스트와 본인 순위(myRank)를 함께 반환.',
+  })
+  @ApiParam({ name: 'id', description: '클럽 ID', example: '1' })
+  @Get(':id/leaderboard')
+  getLeaderboard(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.groupsService.getClubLeaderboard(+id, userId);
+  }
+
   /**
    * [DEPRECATED] 즉시 가입은 폐기됨. join-requests를 사용하세요.
    */

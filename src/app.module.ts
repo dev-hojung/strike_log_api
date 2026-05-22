@@ -13,6 +13,7 @@ import { GamesModule } from './games/games.module';
 import { EmailModule } from './email/email.module';
 import { GameRoomsModule } from './game-rooms/game-rooms.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { BadgesModule } from './badges/badges.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     EmailModule,
     GameRoomsModule,
     NotificationsModule,
+    BadgesModule,
   ],
   controllers: [AppController],
   providers: [

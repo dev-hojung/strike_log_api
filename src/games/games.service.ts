@@ -101,7 +101,44 @@ export class GamesService {
       );
     }
 
+    // 개인 최고 점수 갱신 알림 (비동기, 게임 저장 흐름과 격리)
+    this.notifyIfNewBestScore(user_id, saved.id, saved.total_score).catch(
+      (err) => console.error('[Games] 베스트 갱신 알림 전송 실패:', err),
+    );
+
     return saved;
+  }
+
+  /**
+   * 방금 저장한 게임이 사용자의 개인 최고점을 갱신했는지 검사하고, 그렇다면 알림 발송.
+   * 첫 게임(이전 기록 없음)은 베스트로 보지 않는다.
+   */
+  private async notifyIfNewBestScore(
+    userId: string,
+    savedGameId: number,
+    savedScore: number,
+  ): Promise<void> {
+    // 방금 저장한 게임을 제외한 이전 최고점 조회.
+    const prevBestRow = await this.gameRepository
+      .createQueryBuilder('g')
+      .select('MAX(g.total_score)', 'max')
+      .where('g.user_id = :userId', { userId })
+      .andWhere('g.id != :savedGameId', { savedGameId })
+      .getRawOne<{ max: number | null }>();
+
+    const prevBest = prevBestRow?.max != null ? Number(prevBestRow.max) : null;
+
+    // 첫 게임이거나 갱신이 아니면 알림 생략.
+    if (prevBest == null) return;
+    if (savedScore <= prevBest) return;
+
+    await this.notificationsService.create({
+      userId,
+      type: NotificationType.NEW_BEST_SCORE,
+      title: '새 베스트 점수 달성!',
+      body: `이번 게임 ${savedScore}점으로 개인 최고 기록을 갱신했어요. (이전 ${prevBest}점)`,
+      targetId: String(savedGameId),
+    });
   }
 
   /**

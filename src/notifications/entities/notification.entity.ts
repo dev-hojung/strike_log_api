@@ -21,6 +21,7 @@ export enum NotificationType {
   CLUB_CREATION_REJECTED = 'club_creation_rejected',
   CLUB_TRIAL_EXPIRING_SOON = 'club_trial_expiring_soon',
   CLUB_TRIAL_EXPIRED = 'club_trial_expired',
+  NEW_BEST_SCORE = 'new_best_score',
 }
 
 /**

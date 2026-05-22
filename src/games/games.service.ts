@@ -7,6 +7,8 @@ import { GroupMember } from '../groups/entities/group-member.entity';
 import { Group, SubscriptionStatus } from '../groups/entities/group.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
+import { BadgesService, BadgeEvalContext } from '../badges/badges.service';
+import { BADGE_BY_KEY } from '../badges/badge-catalog';
 
 @Injectable()
 export class GamesService {
@@ -20,6 +22,7 @@ export class GamesService {
     @InjectRepository(Group)
     private readonly groupRepository: Repository<Group>,
     private readonly notificationsService: NotificationsService,
+    private readonly badgesService: BadgesService,
   ) {}
 
   /**
@@ -106,7 +109,42 @@ export class GamesService {
       (err) => console.error('[Games] 베스트 갱신 알림 전송 실패:', err),
     );
 
+    // 배지 평가 및 신규 획득 알림 (비동기)
+    this.evaluateBadgesAndNotify(user_id, {
+      savedGame: {
+        id: saved.id,
+        total_score: saved.total_score,
+        frames: createData.frames,
+        is_club_game: saved.is_club_game,
+        club_rank: saved.club_rank,
+      },
+    }).catch((err) => console.error('[Games] 배지 평가 실패:', err));
+
     return saved;
+  }
+
+  /**
+   * 배지 평가 + 신규 획득 시 알림 발송.
+   * 시리즈 완료 훅에서도 호출되도록 public 노출.
+   */
+  async evaluateBadgesAndNotify(
+    userId: string,
+    context: BadgeEvalContext,
+  ): Promise<void> {
+    const newlyEarned = await this.badgesService.checkAndAward(userId, context);
+    if (newlyEarned.length === 0) return;
+    for (const key of newlyEarned) {
+      const def = BADGE_BY_KEY.get(key);
+      await this.notificationsService.create({
+        userId,
+        type: NotificationType.BADGE_EARNED,
+        title: '새 배지 획득!',
+        body: def
+          ? `${def.name} 배지를 획득했어요. ${def.description}`
+          : `${key} 배지를 획득했어요.`,
+        targetId: key,
+      });
+    }
   }
 
   /**

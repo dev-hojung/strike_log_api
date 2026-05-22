@@ -1,8 +1,15 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  forwardRef,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Not, Repository } from 'typeorm';
 import { GameSeries } from './entities/game-series.entity';
 import { Game } from './entities/game.entity';
+import { GamesService } from './games.service';
 
 /**
  * 시리즈(게임 묶음) 도메인 로직.
@@ -22,6 +29,8 @@ export class GameSeriesService {
     private readonly seriesRepository: Repository<GameSeries>,
     @InjectRepository(Game)
     private readonly gameRepository: Repository<Game>,
+    @Inject(forwardRef(() => GamesService))
+    private readonly gamesService: GamesService,
   ) {}
 
   async createSeries(
@@ -51,6 +60,24 @@ export class GameSeriesService {
     if (!series.completed_at) {
       series.completed_at = new Date();
       await this.seriesRepository.save(series);
+
+      // 시리즈 종료 직후 배지 평가 (시리즈 완주 관련 배지 트리거).
+      // 비동기로 격리: 평가 실패가 시리즈 종료 응답에 영향을 주지 않도록.
+      const games = await this.gameRepository.find({
+        where: { series_id: seriesId },
+      });
+      const totalScore = games.reduce((acc, g) => acc + (g.total_score ?? 0), 0);
+      this.gamesService
+        .evaluateBadgesAndNotify(userId, {
+          completedSeries: {
+            id: series.id,
+            total_score: totalScore,
+            gameCount: games.length,
+          },
+        })
+        .catch((err) =>
+          console.error('[GameSeries] 배지 평가 실패:', err),
+        );
     }
     return series;
   }

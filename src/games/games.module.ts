@@ -10,11 +10,13 @@ import { GameSeries } from './entities/game-series.entity';
 import { GroupMember } from '../groups/entities/group-member.entity';
 import { Group } from '../groups/entities/group.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { BadgesModule } from '../badges/badges.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Game, Frame, GameSeries, GroupMember, Group]),
     NotificationsModule,
+    BadgesModule,
   ],
   controllers: [GamesController, GameSeriesController],
   providers: [GamesService, GameSeriesService],

@@ -109,18 +109,50 @@ export class GamesService {
       (err) => console.error('[Games] 베스트 갱신 알림 전송 실패:', err),
     );
 
-    // 배지 평가 및 신규 획득 알림 (비동기)
-    this.evaluateBadgesAndNotify(user_id, {
-      savedGame: {
-        id: saved.id,
-        total_score: saved.total_score,
-        frames: createData.frames,
-        is_club_game: saved.is_club_game,
-        club_rank: saved.club_rank,
-      },
-    }).catch((err) => console.error('[Games] 배지 평가 실패:', err));
+    // 배지 평가는 동기로 수행해 신규 키를 응답에 동봉(클라 모달 트리거).
+    // 알림 발송은 평가 후 fire-and-forget.
+    let newlyEarnedBadges: Array<{ key: string; name: string; description: string; category: string }> = [];
+    try {
+      const keys = await this.badgesService.checkAndAward(user_id, {
+        savedGame: {
+          id: saved.id,
+          total_score: saved.total_score,
+          frames: createData.frames,
+          is_club_game: saved.is_club_game,
+          club_rank: saved.club_rank,
+        },
+      });
+      for (const key of keys) {
+        const def = BADGE_BY_KEY.get(key);
+        this.notificationsService
+          .create({
+            userId: user_id,
+            type: NotificationType.BADGE_EARNED,
+            title: '새 배지 획득!',
+            body: def
+              ? `${def.name} 배지를 획득했어요. ${def.description}`
+              : `${key} 배지를 획득했어요.`,
+            targetId: key,
+          })
+          .catch((err) =>
+            console.error('[Games] 배지 알림 전송 실패:', err),
+          );
+      }
+      newlyEarnedBadges = keys.map((k) => {
+        const d = BADGE_BY_KEY.get(k);
+        return {
+          key: k,
+          name: d?.name ?? k,
+          description: d?.description ?? '',
+          category: d?.category ?? '',
+        };
+      });
+    } catch (err) {
+      console.error('[Games] 배지 평가 실패:', err);
+    }
 
-    return saved;
+    // Game 엔티티 + 신규 배지 메타데이터 동봉.
+    return { ...saved, newly_earned_badges: newlyEarnedBadges };
   }
 
   /**

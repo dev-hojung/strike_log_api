@@ -9,9 +9,10 @@ import { FcmToken } from './entities/fcm-token.entity';
 /**
  * Firebase Admin SDK를 사용해 FCM 푸시를 전송한다.
  *
- * 초기화 방법 (둘 중 하나):
- * 1. `FIREBASE_SERVICE_ACCOUNT_PATH` 환경변수에 JSON 파일 경로 지정
- * 2. `GOOGLE_APPLICATION_CREDENTIALS` 환경변수 (gcloud 기본) 사용 → applicationDefault()
+ * 초기화 우선순위:
+ * 1. `FIREBASE_PROJECT_ID` + `FIREBASE_CLIENT_EMAIL` + `FIREBASE_PRIVATE_KEY` 환경변수
+ * 2. `FIREBASE_SERVICE_ACCOUNT_PATH` 환경변수의 JSON 파일
+ * 3. `GOOGLE_APPLICATION_CREDENTIALS` (gcloud 기본) → applicationDefault()
  *
  * 초기화에 실패하면 `enabled=false`로 남고, send()는 조용히 no-op이 된다.
  * (개발 환경에서 키 없이도 서버가 죽지 않도록)
@@ -32,8 +33,18 @@ export class PushService implements OnModuleInit {
       return;
     }
     try {
+      const projectId = process.env.FIREBASE_PROJECT_ID;
+      const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+      const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
       const saPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
-      if (saPath) {
+
+      if (projectId && clientEmail && privateKeyRaw) {
+        // .env의 PEM은 \n이 리터럴로 들어오므로 실제 개행으로 복원
+        const privateKey = privateKeyRaw.replace(/\\n/g, '\n');
+        admin.initializeApp({
+          credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
+        });
+      } else if (saPath) {
         const abs = path.isAbsolute(saPath) ? saPath : path.join(process.cwd(), saPath);
         const raw = fs.readFileSync(abs, 'utf8');
         const json = JSON.parse(raw);

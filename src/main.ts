@@ -51,9 +51,10 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 
   const port = process.env.PORT || 3001;
-  await app.listen(port, '0.0.0.0');
-  console.log(`Application is running on: http://0.0.0.0:${port}`);
-  console.log(`Swagger UI: http://0.0.0.0:${port}/api`);
+  // 호스트 인자를 명시하지 않아 Node가 IPv4+IPv6 듀얼스택으로 listen하도록 한다 (Railway 호환).
+  await app.listen(port);
+  console.log(`Application is running on port ${port}`);
+  console.log(`Swagger UI: /api`);
 }
 bootstrap().catch((err) => {
   console.error('Error starting server', err);

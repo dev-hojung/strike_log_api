@@ -15,6 +15,7 @@ if (typeof (net as any).setDefaultAutoSelectFamily === 'function') {
 
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
@@ -22,6 +23,11 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   // Flutter 앱 또는 외부 클라이언트와의 연동을 위해 CORS를 활성화합니다.
   app.enableCors();
+
+  // 프로필 이미지를 base64 Data URI로 전송하므로 기본 100KB 한도를 확장.
+  // 클라 측에서도 350KB 한도(maxDataUriLength)로 차단하지만, 응답 조회 본문이 큰 경우를 대비해 여유.
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ extended: true, limit: '10mb' }));
 
   // [DEBUG] 인입 요청 로그 (메서드/경로/상태/소요시간). 진단 끝나면 제거 가능.
   const httpLogger = new Logger('HTTP');

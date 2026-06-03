@@ -36,9 +36,8 @@ import { BadgesModule } from './badges/badges.module';
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         migrations: [__dirname + '/migrations/*{.ts,.js}'],
         migrationsTableName: 'typeorm_migrations',
-        // TEMP: Railway 신규 DB 초기 부트스트랩용 강제 synchronize. 테이블 생성 확인 후 반드시 원복.
         // synchronize는 개발 환경에서만 env TYPEORM_SYNCHRONIZE=true로 on. 기본 off.
-        synchronize: true,
+        synchronize: configService.get<string>('TYPEORM_SYNCHRONIZE') === 'true',
         // 기동 시 미적용 마이그레이션 자동 실행
         migrationsRun: true,
       }),

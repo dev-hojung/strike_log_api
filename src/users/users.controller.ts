@@ -1,5 +1,5 @@
 import { LoginUserDto } from './dto/login-user.dto';
-import { Controller, Get, Post, Body, Patch, Param, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiBody } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { Public } from '../auth/public.decorator';
@@ -130,5 +130,16 @@ export class UsersController {
       throw new ForbiddenException('본인만 프로필을 수정할 수 있습니다.');
     }
     return this.usersService.updateProfile(id, updateData);
+  }
+
+  /**
+   * 계정 삭제 (회원 탈퇴).
+   * 본인 계정과 연관된 모든 데이터를 영구 삭제한다.
+   */
+  @ApiOperation({ summary: '계정 삭제 (회원 탈퇴)' })
+  @Delete('me')
+  async deleteMe(@CurrentUser('id') userId: string) {
+    await this.usersService.deleteMe(userId);
+    return { message: '계정이 삭제되었습니다.' };
   }
 }

@@ -10,6 +10,7 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { User } from './entities/user.entity';
+import { FcmToken } from '../notifications/entities/fcm-token.entity';
 import { JwtPayload } from '../auth/jwt.strategy';
 
 @Injectable()
@@ -17,6 +18,8 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(FcmToken)
+    private readonly fcmTokenRepository: Repository<FcmToken>,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -143,5 +146,29 @@ export class UsersService {
     const user = await this.getProfile(id);
     Object.assign(user, updateData);
     return this.userRepository.save(user);
+  }
+
+  /**
+   * 회원 탈퇴 — 본인 계정과 연관된 모든 데이터를 삭제한다.
+   *
+   * 삭제 범위:
+   * - games / frames / game_series — FK CASCADE
+   * - group_members / group_join_requests / group_creation_requests — FK CASCADE
+   * - notifications / user_badges — FK CASCADE
+   * - fcm_tokens — userId 컬럼만 있고 FK relation 없으므로 직접 삭제
+   * - users 본 행
+   *
+   * 그룹(클럽) 자체는 삭제하지 않는다. 사용자가 만든 클럽이라도 다른 멤버가 남아 있다면 보존.
+   *
+   * @throws NotFoundException 대상 사용자가 존재하지 않을 때
+   */
+  async deleteMe(userId: string): Promise<void> {
+    // FCM 토큰은 onDelete CASCADE가 없어 별도 정리.
+    await this.fcmTokenRepository.delete({ userId });
+
+    const result = await this.userRepository.delete({ id: userId });
+    if (result.affected === 0) {
+      throw new NotFoundException('사용자를 찾을 수 없습니다.');
+    }
   }
 }

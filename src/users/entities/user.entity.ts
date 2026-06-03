@@ -37,9 +37,12 @@ export class User {
   phone: string;
 
   /**
-   * 프로필 이미지 주소
+   * 프로필 이미지.
+   *
+   * - HTTP(S) URL 또는 base64 Data URI(`data:image/jpeg;base64,...`)를 그대로 저장.
+   * - 클라가 파일 업로드 인프라 없이 압축된 base64를 전송하므로 LONGTEXT로 확장.
    */
-  @Column({ nullable: true })
+  @Column({ type: 'longtext', nullable: true })
   profile_image_url: string;
 
   /**

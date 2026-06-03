@@ -19,28 +19,40 @@ import { BadgesModule } from './badges/badges.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: `${process.cwd()}/.env`,
+      // NODE_ENV별로 우선순위 로드. Railway 같은 운영 환경은 .env 파일이 없어도
+      // 시스템 환경변수로 채워지므로 문제 없음. 로컬은 .env만 두면 됨.
+      envFilePath: [
+        `.env.${process.env.NODE_ENV ?? 'development'}.local`,
+        `.env.${process.env.NODE_ENV ?? 'development'}`,
+        '.env.local',
+        '.env',
+      ],
       cache: false,
     }),
     ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'mysql',
-        host: configService.get<string>('MYSQLHOST', 'localhost'),
-        port: configService.get<number>('MYSQLPORT', 3306),
-        username: configService.get<string>('MYSQLUSER', 'root'),
-        password: configService.get<string>('MYSQLPASSWORD', ''),
-        database: configService.get<string>('MYSQLDATABASE', 'strike_log'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        migrations: [__dirname + '/migrations/*{.ts,.js}'],
-        migrationsTableName: 'typeorm_migrations',
-        // synchronize는 개발 환경에서만 env TYPEORM_SYNCHRONIZE=true로 on. 기본 off.
-        synchronize: configService.get<string>('TYPEORM_SYNCHRONIZE') === 'true',
-        // 기동 시 미적용 마이그레이션 자동 실행
-        migrationsRun: true,
-      }),
+      useFactory: (configService: ConfigService) => {
+        const nodeEnv = configService.get<string>('NODE_ENV', 'development');
+        const isProd = nodeEnv === 'production';
+        return {
+          type: 'mysql',
+          host: configService.get<string>('MYSQLHOST', 'localhost'),
+          port: configService.get<number>('MYSQLPORT', 3306),
+          username: configService.get<string>('MYSQLUSER', 'root'),
+          password: configService.get<string>('MYSQLPASSWORD', ''),
+          database: configService.get<string>('MYSQLDATABASE', 'strike_log'),
+          entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          migrations: [__dirname + '/migrations/*{.ts,.js}'],
+          migrationsTableName: 'typeorm_migrations',
+          // 운영에서는 절대 synchronize 금지. 로컬에서만 TYPEORM_SYNCHRONIZE=true 시 활성.
+          synchronize:
+            !isProd && configService.get<string>('TYPEORM_SYNCHRONIZE') === 'true',
+          migrationsRun: true,
+          logging: isProd ? ['error', 'warn'] : ['error', 'warn', 'schema'],
+        };
+      },
     }),
     AuthModule,
     UsersModule,

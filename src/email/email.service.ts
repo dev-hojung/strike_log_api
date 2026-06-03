@@ -38,8 +38,14 @@ export class EmailService {
       // 개발/테스트 편의를 위해 발급된 OTP를 콘솔에 출력합니다.
       console.log(`[Email Auth OTP] To: ${email}, Code: ${otpCode}`);
 
+      // 인증된 도메인 발신 주소.
+      // Railway env `RESEND_FROM_ADDRESS`로 오버라이드 가능 (도메인 변경 시 코드 수정 불필요).
+      const fromAddress =
+        this.configService.get<string>('RESEND_FROM_ADDRESS') ??
+        'Strike Log <noreply@strikelog.xyz>';
+
       const { error } = await this.resend.emails.send({
-        from: 'onboarding@resend.dev',
+        from: fromAddress,
         to: email,
         subject: '[STRIKE LOG] 회원가입 인증번호',
         html: `<div style="font-family: sans-serif; padding: 20px;">

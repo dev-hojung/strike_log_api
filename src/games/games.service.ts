@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, GoneException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  GoneException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Game } from './entities/game.entity';
@@ -9,6 +14,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
 import { BadgesService, BadgeEvalContext } from '../badges/badges.service';
 import { BADGE_BY_KEY } from '../badges/badge-catalog';
+import { isPlatformAdmin } from '../common/admin';
 
 @Injectable()
 export class GamesService {
@@ -24,6 +30,41 @@ export class GamesService {
     private readonly notificationsService: NotificationsService,
     private readonly badgesService: BadgesService,
   ) {}
+
+  /**
+   * 통계 조회 권한 검증.
+   * - 본인 또는 플랫폼 관리자: 무조건 허용
+   * - 둘 다 아니면 actor와 target이 같은 클럽 멤버인지 확인 (어떤 클럽이라도 공유)
+   *
+   * 클럽 기능의 자연스러운 확장: 같은 클럽 멤버끼리 서로의 통계를 비교할 수 있어야 한다.
+   * 다른 곳(게임 상세 등)에는 적용하지 않고 통계 endpoint 전용.
+   *
+   * @throws ForbiddenException 공유 클럽이 없는 경우
+   */
+  async assertSelfOrAdminOrClubMate(
+    actorId: string,
+    targetId: string,
+  ): Promise<void> {
+    if (actorId === targetId) return;
+    if (isPlatformAdmin(actorId)) return;
+
+    const shared = await this.groupMemberRepository
+      .createQueryBuilder('m1')
+      .innerJoin(
+        GroupMember,
+        'm2',
+        'm2.group_id = m1.group_id AND m2.user_id = :target',
+        { target: targetId },
+      )
+      .where('m1.user_id = :actor', { actor: actorId })
+      .getCount();
+
+    if (shared === 0) {
+      throw new ForbiddenException(
+        '같은 클럽 멤버의 통계만 조회할 수 있습니다.',
+      );
+    }
+  }
 
   /**
    * 클럽 게임 생성 허용 여부 검증.

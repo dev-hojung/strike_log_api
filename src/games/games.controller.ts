@@ -82,11 +82,12 @@ export class GamesController {
    * 사용자 통계 (평균 점수, 최고 점수, 최근 10게임) 조회
    * 본인 또는 플랫폼 관리자만 접근 가능 (보수적 정책).
    */
-  @ApiOperation({ summary: '유저 통계 조회 (평균/최고/최근 10게임) — 본인/관리자만' })
+  @ApiOperation({ summary: '유저 통계 조회 (평균/최고/최근 10게임) — 본인/관리자/같은 클럽 멤버' })
   @ApiParam({ name: 'user_id', description: '유저 ID', example: 'uuid-1234' })
   @Get('users/:user_id/statistics')
-  getUserStatistics(@Param('user_id') user_id: string, @CurrentUser('id') actorId: string) {
-    this.assertSelfOrAdmin(actorId, user_id);
+  async getUserStatistics(@Param('user_id') user_id: string, @CurrentUser('id') actorId: string) {
+    // 본인/관리자 + 같은 클럽 멤버까지 허용 (클럽 멤버 간 통계 비교 UX).
+    await this.gamesService.assertSelfOrAdminOrClubMate(actorId, user_id);
     return this.gamesService.getUserStatistics(user_id);
   }
 
@@ -115,12 +116,13 @@ export class GamesController {
    * 본인/관리자만.
    */
   @ApiOperation({
-    summary: '이번 달 프레임 통계 조회 (스트라이크/스페어/오픈/올커버) — 본인/관리자만',
+    summary: '이번 달 프레임 통계 조회 (스트라이크/스페어/오픈/올커버) — 본인/관리자/같은 클럽 멤버',
   })
   @ApiParam({ name: 'user_id', description: '유저 ID', example: 'uuid-1234' })
   @Get('users/:user_id/monthly-frame-stats')
-  getMonthlyFrameStats(@Param('user_id') user_id: string, @CurrentUser('id') actorId: string) {
-    this.assertSelfOrAdmin(actorId, user_id);
+  async getMonthlyFrameStats(@Param('user_id') user_id: string, @CurrentUser('id') actorId: string) {
+    // 본인/관리자 + 같은 클럽 멤버까지 허용 (클럽 멤버 간 통계 비교 UX).
+    await this.gamesService.assertSelfOrAdminOrClubMate(actorId, user_id);
     return this.gamesService.getMonthlyFrameStats(user_id);
   }
 

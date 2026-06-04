@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, GoneException } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, GoneException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiBody, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { GroupsService } from './groups.service';
 import {
@@ -266,5 +266,35 @@ export class GroupsController {
   @Get(':id/members-with-stats')
   getMembersWithStats(@Param('id') id: string) {
     return this.groupsService.getMembersWithStats(+id);
+  }
+
+  @ApiOperation({
+    summary: '클럽 멤버를 운영자(ADMIN)로 승격',
+    description:
+      '호출자는 해당 클럽의 ADMIN이어야 한다. 대상이 본인이거나 이미 ADMIN이면 409.',
+  })
+  @ApiParam({ name: 'id', description: '클럽 ID', example: '1' })
+  @ApiParam({ name: 'userId', description: '승격 대상 사용자 UUID' })
+  @Post(':id/members/:userId/promote')
+  promoteMember(
+    @Param('id') id: string,
+    @Param('userId') targetUserId: string,
+    @CurrentUser('id') currentUserId: string,
+  ) {
+    return this.groupsService.promoteToAdmin(+id, currentUserId, targetUserId);
+  }
+
+  @ApiOperation({
+    summary: '클럽 탈퇴',
+    description:
+      '본인 멤버십 삭제. 유일 ADMIN+다른 멤버 있으면 409 (권한 위임 필요). 본인이 유일 멤버면 클럽도 함께 삭제.',
+  })
+  @ApiParam({ name: 'id', description: '클럽 ID', example: '1' })
+  @Delete(':id/leave')
+  leaveGroup(
+    @Param('id') id: string,
+    @CurrentUser('id') currentUserId: string,
+  ) {
+    return this.groupsService.leaveGroup(+id, currentUserId);
   }
 }

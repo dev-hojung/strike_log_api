@@ -693,4 +693,110 @@ export class GroupsService implements OnModuleInit {
 
     return result;
   }
+
+  /**
+   * 멤버를 ADMIN으로 승격(권한 위임).
+   *
+   * 호출자는 본인이 해당 클럽의 ADMIN이어야 한다.
+   * 대상이 이미 ADMIN이거나 본인 자신이면 멱등 처리하지 않고 ConflictException 발생.
+   *
+   * @throws NotFoundException 클럽이 없음
+   * @throws ForbiddenException 호출자가 ADMIN이 아님
+   * @throws NotFoundException 대상이 해당 클럽 멤버가 아님
+   * @throws ConflictException 대상이 본인이거나 이미 ADMIN
+   */
+  async promoteToAdmin(
+    groupId: number,
+    currentUserId: string,
+    targetUserId: string,
+  ): Promise<{ ok: true }> {
+    if (currentUserId === targetUserId) {
+      throw new ConflictException('본인은 위임 대상이 될 수 없습니다.');
+    }
+
+    const group = await this.groupRepository.findOne({ where: { id: groupId } });
+    if (!group) {
+      throw new NotFoundException('클럽을 찾을 수 없습니다.');
+    }
+
+    const me = await this.groupMemberRepository.findOne({
+      where: { group_id: groupId, user_id: currentUserId },
+    });
+    if (!me || me.role !== GroupRole.ADMIN) {
+      throw new ForbiddenException('운영자만 권한을 위임할 수 있습니다.');
+    }
+
+    const target = await this.groupMemberRepository.findOne({
+      where: { group_id: groupId, user_id: targetUserId },
+    });
+    if (!target) {
+      throw new NotFoundException('해당 사용자는 이 클럽의 멤버가 아닙니다.');
+    }
+    if (target.role === GroupRole.ADMIN) {
+      throw new ConflictException('이미 운영자입니다.');
+    }
+
+    target.role = GroupRole.ADMIN;
+    await this.groupMemberRepository.save(target);
+    return { ok: true };
+  }
+
+  /**
+   * 클럽 탈퇴.
+   *
+   * 정책:
+   * - 일반 MEMBER: 즉시 탈퇴
+   * - 다른 ADMIN이 또 있는 ADMIN: 즉시 탈퇴
+   * - 유일한 ADMIN인데 다른 멤버가 남아 있음 → ConflictException (권한 위임 필요)
+   * - 본인이 클럽의 유일 멤버 → 본인 row 삭제 + 클럽 자체 삭제(CASCADE로 멤버십/조인요청 정리)
+   *
+   * 클럽 게임 기록(games.group_id) 등은 보존된다.
+   *
+   * @throws NotFoundException 해당 클럽 멤버가 아님
+   * @throws ConflictException 유일 ADMIN + 다른 멤버 존재
+   */
+  async leaveGroup(
+    groupId: number,
+    userId: string,
+  ): Promise<{ ok: true; group_deleted: boolean }> {
+    const me = await this.groupMemberRepository.findOne({
+      where: { group_id: groupId, user_id: userId },
+    });
+    if (!me) {
+      throw new NotFoundException('가입된 클럽이 아닙니다.');
+    }
+
+    const totalMembers = await this.groupMemberRepository.count({
+      where: { group_id: groupId },
+    });
+
+    // 유일 멤버 케이스: 본인 row + 클럽 자체 삭제.
+    if (totalMembers === 1) {
+      await this.groupMemberRepository.delete({
+        group_id: groupId,
+        user_id: userId,
+      });
+      // group_members, group_join_requests는 group.id에 onDelete CASCADE.
+      await this.groupRepository.delete({ id: groupId });
+      return { ok: true, group_deleted: true };
+    }
+
+    // ADMIN인데 다른 ADMIN이 없으면 위임 필요 (C3).
+    if (me.role === GroupRole.ADMIN) {
+      const otherAdmins = await this.groupMemberRepository.count({
+        where: { group_id: groupId, role: GroupRole.ADMIN },
+      });
+      if (otherAdmins <= 1) {
+        throw new ConflictException(
+          '마지막 운영자입니다. 다른 멤버에게 운영자 권한을 위임한 후 탈퇴할 수 있습니다.',
+        );
+      }
+    }
+
+    await this.groupMemberRepository.delete({
+      group_id: groupId,
+      user_id: userId,
+    });
+    return { ok: true, group_deleted: false };
+  }
 }

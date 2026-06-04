@@ -64,6 +64,8 @@
 |------|------|------|
 | `GET` | `/groups/:id/members` | 클럽 멤버 목록 조회 |
 | `GET` | `/groups/:id/members-with-stats` | 클럽 멤버 목록 + 평균 점수 |
+| `POST` | `/groups/:id/members/:userId/promote` | 멤버를 운영자(ADMIN)로 승격 (운영자만) |
+| `DELETE` | `/groups/:id/leave` | 클럽 탈퇴 (유일 ADMIN+다른 멤버 있으면 409) |
 
 ## 서비스 책임
 

@@ -119,11 +119,14 @@ export class BadgesService {
     totalGames: number;
     maxScore: number;
     completedSeriesCount: number;
+    completedThreeGameSeriesCount: number;
     maxSeriesAvg: number;
     currentStreak: number;
     clubMembershipCount: number;
     clubGameCount: number;
     clubWinCount: number;
+    maxStrikesInGame: number;
+    maxConsecutiveStrikes: number;
   }> {
     const [
       totalGames,
@@ -132,10 +135,15 @@ export class BadgesService {
       // game_series에 total_score 컬럼이 없으므로 자식 games를 SUM해서 시리즈별 평균 계산.
       // MAX(SUM(...))은 표준 SQL에서 직접 못 쓰므로 시리즈별 평균을 모두 받아 메모리에서 max 추출.
       seriesAvgRows,
+      // 3게임 시리즈만 따로 카운트 (series_3_full 배지 평가용).
+      completedThreeGameSeries,
       streak,
       clubMembershipCount,
       clubGameCount,
       clubWinCount,
+      // 모든 게임의 frames를 메모리에서 집계해 한 게임 최대 스트라이크 / 최장 연속 추출.
+      // 이력 평가 미지원으로 인해 strikes_5/8/10/consecutive_5가 과거 베스트를 무시하던 문제 해소.
+      strikesStats,
     ] = await Promise.all([
       this.gameRepository.count({ where: { user_id: userId } }),
       this.gameRepository
@@ -153,10 +161,17 @@ export class BadgesService {
         .groupBy('s.id')
         .addGroupBy('s.target_game_count')
         .getRawMany<{ avg_score: number | string }>(),
+      this.seriesRepository
+        .createQueryBuilder('s')
+        .where('s.user_id = :userId', { userId })
+        .andWhere('s.target_game_count = 3')
+        .andWhere('s.completed_at IS NOT NULL')
+        .getCount(),
       this.computeCurrentStreak(userId),
       this.groupMemberRepository.count({ where: { user_id: userId } }),
       this.gameRepository.count({ where: { user_id: userId, is_club_game: true } }),
       this.gameRepository.count({ where: { user_id: userId, is_club_game: true, club_rank: 1 } }),
+      this.loadStrikesStats(userId),
     ]);
 
     const maxSeriesAvg = seriesAvgRows.length > 0
@@ -167,12 +182,39 @@ export class BadgesService {
       totalGames,
       maxScore: Number(maxScoreRow?.max ?? 0),
       completedSeriesCount: completedSeries,
+      completedThreeGameSeriesCount: completedThreeGameSeries,
       maxSeriesAvg,
       currentStreak: streak,
       clubMembershipCount,
       clubGameCount,
       clubWinCount,
+      maxStrikesInGame: strikesStats.maxStrikes,
+      maxConsecutiveStrikes: strikesStats.maxConsecutive,
     };
+  }
+
+  /**
+   * 사용자의 모든 게임에서 한 게임 최대 스트라이크 수, 최장 연속 스트라이크를 집계.
+   * frames를 JS에서 직접 훑어 [countStrikes]/[longestStrikeStreak]와 동일 규칙 적용.
+   */
+  private async loadStrikesStats(
+    userId: string,
+  ): Promise<{ maxStrikes: number; maxConsecutive: number }> {
+    const games = await this.gameRepository.find({
+      where: { user_id: userId },
+      relations: ['frames'],
+    });
+    let maxStrikes = 0;
+    let maxConsecutive = 0;
+    for (const g of games) {
+      const frames = g.frames ?? [];
+      if (frames.length === 0) continue;
+      const n = countStrikes(frames);
+      if (n > maxStrikes) maxStrikes = n;
+      const c = longestStrikeStreak(frames);
+      if (c > maxConsecutive) maxConsecutive = c;
+    }
+    return { maxStrikes, maxConsecutive };
   }
 
   private evaluate(
@@ -206,20 +248,26 @@ export class BadgesService {
       case 'strikes_5':
       case 'strikes_8':
       case 'strikes_10': {
-        // 방금 저장된 게임의 스트라이크 카운트 (이력 게임은 추후 백필 시 평가).
+        // 방금 저장된 게임 또는 이력 전체 베스트 중 큰 값으로 평가.
         const frames = context.savedGame?.frames ?? [];
-        const n = countStrikes(frames);
-        return n >= (def.threshold ?? Number.MAX_SAFE_INTEGER);
+        const fromContext = frames.length > 0 ? countStrikes(frames) : 0;
+        const best = Math.max(fromContext, stats.maxStrikesInGame);
+        return best >= (def.threshold ?? Number.MAX_SAFE_INTEGER);
       }
       case 'strikes_consecutive_5': {
         const frames = context.savedGame?.frames ?? [];
-        return longestStrikeStreak(frames) >= 5;
+        const fromContext = frames.length > 0 ? longestStrikeStreak(frames) : 0;
+        return Math.max(fromContext, stats.maxConsecutiveStrikes) >= 5;
       }
 
       case 'series_first':
         return stats.completedSeriesCount >= 1;
       case 'series_3_full':
-        return !!context.completedSeries && context.completedSeries.gameCount >= 3;
+        // 이력의 3게임 시리즈 완주 1번 이상이거나, 방금 완주한 시리즈가 3게임 이상.
+        return (
+          stats.completedThreeGameSeriesCount >= 1 ||
+          (!!context.completedSeries && context.completedSeries.gameCount >= 3)
+        );
       case 'series_avg_180':
         return stats.maxSeriesAvg >= 180;
       case 'series_avg_200':

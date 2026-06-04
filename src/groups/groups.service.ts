@@ -20,6 +20,7 @@ import { Game } from '../games/entities/game.entity';
 import { User } from '../users/entities/user.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
+import { BadgesService } from '../badges/badges.service';
 import { isPlatformAdmin, platformAdminIds } from '../common/admin';
 
 @Injectable()
@@ -36,6 +37,7 @@ export class GroupsService implements OnModuleInit {
     @InjectRepository(Game)
     private readonly gameRepository: Repository<Game>,
     private readonly notificationsService: NotificationsService,
+    private readonly badgesService: BadgesService,
   ) {}
 
   // ---------- 클럽 생성 신청 플로우 ----------
@@ -242,6 +244,11 @@ export class GroupsService implements OnModuleInit {
       role: GroupRole.ADMIN,
     });
     await this.groupMemberRepository.save(member);
+
+    // 신규 멤버십 발생 → club_joined 배지 평가 (실패해도 클럽 생성 흐름 차단 X).
+    void this.badgesService
+      .checkAndAward(user_id)
+      .catch((err) => console.error('[Groups] 클럽 생성 후 배지 평가 실패:', err));
 
     return group;
   }
@@ -598,6 +605,11 @@ export class GroupsService implements OnModuleInit {
       role: GroupRole.MEMBER,
     });
     await this.groupMemberRepository.save(member);
+
+    // 신규 멤버십 발생 → club_joined 배지 평가 (실패해도 승인 흐름 차단 X).
+    void this.badgesService
+      .checkAndAward(request.user_id)
+      .catch((err) => console.error('[Groups] 가입 승인 후 배지 평가 실패:', err));
 
     // 신청자에게 승인 알림
     const group = await this.getGroupDetail(groupId);

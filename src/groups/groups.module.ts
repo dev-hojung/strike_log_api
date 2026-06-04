@@ -9,11 +9,13 @@ import { GroupJoinRequest } from './entities/group-join-request.entity';
 import { GroupCreationRequest } from './entities/group-creation-request.entity';
 import { Game } from '../games/entities/game.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { BadgesModule } from '../badges/badges.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Group, GroupMember, GroupJoinRequest, GroupCreationRequest, Game]),
     NotificationsModule,
+    BadgesModule,
   ],
   controllers: [GroupsController],
   providers: [GroupsService, TrialReminderService],

@@ -344,21 +344,24 @@ function longestStrikeStreak(frames: Frame[]): number {
   return max;
 }
 
+// 모든 날짜 계산은 Asia/Seoul(KST) 기준으로 통일.
+// 이유: 클라이언트는 KST yyyy-MM-dd로 play_date를 저장하지만 Railway 호스트는 UTC라
+// 단순 new Date()를 쓰면 새벽~오전 사이 streak가 어긋남 (UTC 어제 vs KST 오늘).
+const KST_TZ = 'Asia/Seoul';
+
 function ymdToday(): string {
-  const d = new Date();
-  return ymd(d);
+  return new Date().toLocaleDateString('en-CA', { timeZone: KST_TZ });
 }
 
 function ymd(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return d.toLocaleDateString('en-CA', { timeZone: KST_TZ });
 }
 
 function ymdShift(s: string, deltaDays: number): string {
+  // 정오 UTC로 Date 객체 생성 → ±deltaDays 후 KST yyyy-MM-dd 추출.
+  // 정오를 기준점으로 잡으면 KST/UTC 어느 쪽에서 보더라도 자정 경계 문제 없음.
   const [y, m, d] = s.split('-').map(Number);
-  const dt = new Date(y, m - 1, d);
-  dt.setDate(dt.getDate() + deltaDays);
+  const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  dt.setUTCDate(dt.getUTCDate() + deltaDays);
   return ymd(dt);
 }

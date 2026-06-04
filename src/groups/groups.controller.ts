@@ -269,6 +269,16 @@ export class GroupsController {
   }
 
   @ApiOperation({
+    summary: '내가 운영자인 클럽의 pending 가입 신청 수',
+    description: '하단 네비/헤더 뱃지에 사용. 일반 멤버는 항상 0.',
+  })
+  @Get('me/pending-join-requests-count')
+  async getMyPendingJoinRequestsCount(@CurrentUser('id') userId: string) {
+    const count = await this.groupsService.countPendingJoinRequestsForAdmin(userId);
+    return { count };
+  }
+
+  @ApiOperation({
     summary: '클럽 멤버를 운영자(ADMIN)로 승격',
     description:
       '호출자는 해당 클럽의 ADMIN이어야 한다. 대상이 본인이거나 이미 ADMIN이면 409.',

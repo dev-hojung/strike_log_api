@@ -695,6 +695,25 @@ export class GroupsService implements OnModuleInit {
   }
 
   /**
+   * 내가 ADMIN인 모든 클럽의 pending 가입 신청 합계.
+   *
+   * 하단 네비/헤더 뱃지 표시용. ADMIN이 아닌 일반 멤버는 항상 0.
+   */
+  async countPendingJoinRequestsForAdmin(userId: string): Promise<number> {
+    const adminMemberships = await this.groupMemberRepository.find({
+      where: { user_id: userId, role: GroupRole.ADMIN },
+    });
+    if (adminMemberships.length === 0) return 0;
+    const groupIds = adminMemberships.map((m) => m.group_id);
+    return this.joinRequestRepository.count({
+      where: {
+        group_id: In(groupIds),
+        status: JoinRequestStatus.PENDING,
+      },
+    });
+  }
+
+  /**
    * 멤버를 ADMIN으로 승격(권한 위임).
    *
    * 호출자는 본인이 해당 클럽의 ADMIN이어야 한다.

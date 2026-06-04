@@ -129,7 +129,9 @@ export class BadgesService {
       totalGames,
       maxScoreRow,
       completedSeries,
-      bestSeriesRow,
+      // game_series에 total_score 컬럼이 없으므로 자식 games를 SUM해서 시리즈별 평균 계산.
+      // MAX(SUM(...))은 표준 SQL에서 직접 못 쓰므로 시리즈별 평균을 모두 받아 메모리에서 max 추출.
+      seriesAvgRows,
       streak,
       clubMembershipCount,
       clubGameCount,
@@ -144,21 +146,28 @@ export class BadgesService {
       this.seriesRepository.count({ where: { user_id: userId } } as any),
       this.seriesRepository
         .createQueryBuilder('s')
-        .select('MAX(s.total_score / s.target_game_count)', 'avg')
+        .innerJoin('s.games', 'g')
+        .select('SUM(g.total_score) / s.target_game_count', 'avg_score')
         .where('s.user_id = :userId', { userId })
         .andWhere('s.completed_at IS NOT NULL')
-        .getRawOne<{ avg: number | null }>(),
+        .groupBy('s.id')
+        .addGroupBy('s.target_game_count')
+        .getRawMany<{ avg_score: number | string }>(),
       this.computeCurrentStreak(userId),
       this.groupMemberRepository.count({ where: { user_id: userId } }),
       this.gameRepository.count({ where: { user_id: userId, is_club_game: true } }),
       this.gameRepository.count({ where: { user_id: userId, is_club_game: true, club_rank: 1 } }),
     ]);
 
+    const maxSeriesAvg = seriesAvgRows.length > 0
+      ? Math.max(...seriesAvgRows.map((r) => Number(r.avg_score) || 0))
+      : 0;
+
     return {
       totalGames,
       maxScore: Number(maxScoreRow?.max ?? 0),
       completedSeriesCount: completedSeries,
-      maxSeriesAvg: Number(bestSeriesRow?.avg ?? 0),
+      maxSeriesAvg,
       currentStreak: streak,
       clubMembershipCount,
       clubGameCount,

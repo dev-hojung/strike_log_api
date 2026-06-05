@@ -51,9 +51,11 @@ export class GroupsService implements OnModuleInit {
     description?: string;
     cover_image_url?: string;
   }) {
-    if (!params.name?.trim()) {
+    const trimmedName = params.name?.trim();
+    if (!trimmedName) {
       throw new BadRequestException('클럽 이름이 필요합니다.');
     }
+
     // 동일 유저가 PENDING 상태로 이미 신청한 건이 있으면 차단
     const existing = await this.creationRequestRepository.findOne({
       where: {
@@ -65,9 +67,28 @@ export class GroupsService implements OnModuleInit {
       throw new ConflictException('이미 심사 중인 신청이 있습니다.');
     }
 
+    // 이미 승인된 클럽 이름 중복 차단
+    const existingGroup = await this.groupRepository.findOne({
+      where: { name: trimmedName },
+    });
+    if (existingGroup) {
+      throw new ConflictException('이미 사용 중인 클럽 이름입니다.');
+    }
+
+    // 검토 중(PENDING)인 다른 사용자의 동일 이름 신청도 차단
+    const conflictingRequest = await this.creationRequestRepository.findOne({
+      where: {
+        name: trimmedName,
+        status: CreationRequestStatus.PENDING,
+      },
+    });
+    if (conflictingRequest) {
+      throw new ConflictException('동일한 이름으로 검토 중인 신청이 있습니다.');
+    }
+
     const request = this.creationRequestRepository.create({
       requester_id: params.requester_id,
-      name: params.name.trim(),
+      name: trimmedName,
       description: params.description ?? null,
       cover_image_url: params.cover_image_url ?? null,
       status: CreationRequestStatus.PENDING,
@@ -315,6 +336,8 @@ export class GroupsService implements OnModuleInit {
       order: { created_at: 'DESC' },
     });
 
+    const avgMap = await this.computeGroupAverages(groups.map((g) => g.id));
+
     return groups.map((group) => ({
       id: group.id,
       name: group.name,
@@ -322,7 +345,35 @@ export class GroupsService implements OnModuleInit {
       cover_image_url: group.cover_image_url,
       created_at: group.created_at,
       member_count: group.members?.length ?? 0,
+      // 클럽 모든 멤버의 모든 게임 평균. 게임이 없으면 0.
+      avg_score: avgMap.get(group.id) ?? 0,
     }));
+  }
+
+  /**
+   * 여러 클럽의 평균 점수를 한 번의 쿼리로 계산.
+   * 의미: 각 클럽 멤버 전원의 모든 게임(개인/클럽 무관)을 합쳐 평균.
+   * 게임이 없는 클럽은 결과 Map에 키가 존재하지 않음(호출자에서 ?? 0 처리).
+   */
+  private async computeGroupAverages(
+    groupIds: number[],
+  ): Promise<Map<number, number>> {
+    if (groupIds.length === 0) return new Map();
+    const rows = await this.gameRepository
+      .createQueryBuilder('g')
+      .innerJoin(GroupMember, 'm', 'm.user_id = g.user_id')
+      .select('m.group_id', 'group_id')
+      .addSelect('AVG(g.total_score)', 'avg')
+      .where('m.group_id IN (:...groupIds)', { groupIds })
+      .groupBy('m.group_id')
+      .getRawMany<{ group_id: number | string; avg: number | string | null }>();
+    const map = new Map<number, number>();
+    for (const r of rows) {
+      const id = Number(r.group_id);
+      const v = Number(r.avg ?? 0);
+      map.set(id, Number.isFinite(v) ? Math.round(v) : 0);
+    }
+    return map;
   }
 
   /**
@@ -338,6 +389,8 @@ export class GroupsService implements OnModuleInit {
 
     // 만료 갱신을 병렬 처리
     await Promise.all(list.map((m) => this._maybeExpireTrial(m.group)));
+
+    const avgMap = await this.computeGroupAverages(list.map((m) => m.group.id));
 
     return list.map((m) => {
       const group = m.group;
@@ -362,6 +415,8 @@ export class GroupsService implements OnModuleInit {
         subscription_status: group.subscription_status,
         trial_started_at: group.trial_started_at,
         trial_expires_at: group.trial_expires_at,
+        // 클럽 모든 멤버의 모든 게임 평균.
+        avg_score: avgMap.get(group.id) ?? 0,
       };
     });
   }
@@ -373,7 +428,9 @@ export class GroupsService implements OnModuleInit {
     const group = await this.groupRepository.findOne({ where: { id } });
     if (!group) throw new NotFoundException('클럽을 찾을 수 없습니다.');
     await this._maybeExpireTrial(group);
-    return group;
+    const avgMap = await this.computeGroupAverages([id]);
+    // entity 객체를 그대로 두고 응답 직렬화 시 추가 필드 동봉.
+    return { ...group, avg_score: avgMap.get(id) ?? 0 };
   }
 
   /**

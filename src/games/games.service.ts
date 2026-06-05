@@ -315,6 +315,11 @@ export class GamesService {
     if (allGames.length === 0) {
       return {
         averageScore: 0,
+        // 개인/클럽 분리 평균. 게임이 없으면 모두 0.
+        personalAverageScore: 0,
+        clubAverageScore: 0,
+        personalGameCount: 0,
+        clubGameCount: 0,
         highestScore: 0,
         highestScoreDate: null,
         recentTrend: [],
@@ -324,6 +329,20 @@ export class GamesService {
 
     const totalScoreSum = allGames.reduce((sum, game) => sum + game.total_score, 0);
     const averageScore = Math.round(totalScoreSum / allGames.length);
+
+    // 개인 게임(is_club_game=false) / 클럽 게임(is_club_game=true) 분리 평균.
+    const personalGames = allGames.filter((g) => !g.is_club_game);
+    const clubGames = allGames.filter((g) => g.is_club_game);
+    const personalAverageScore = personalGames.length > 0
+      ? Math.round(
+          personalGames.reduce((s, g) => s + g.total_score, 0) / personalGames.length,
+        )
+      : 0;
+    const clubAverageScore = clubGames.length > 0
+      ? Math.round(
+          clubGames.reduce((s, g) => s + g.total_score, 0) / clubGames.length,
+        )
+      : 0;
 
     let highestScore = 0;
     let highestScoreDate: Date | null = null;
@@ -399,6 +418,10 @@ export class GamesService {
 
     return {
       averageScore,
+      personalAverageScore,
+      clubAverageScore,
+      personalGameCount: personalGames.length,
+      clubGameCount: clubGames.length,
       highestScore,
       highestScoreDate,
       recentTrend,

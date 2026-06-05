@@ -571,6 +571,16 @@ export class GroupsService implements OnModuleInit {
       throw new ConflictException('이미 가입된 클럽입니다.');
     }
 
+    // 1인 1클럽 정책: 이미 다른 클럽에 가입된 상태면 새 가입 신청 차단.
+    const otherMembership = await this.groupMemberRepository.findOne({
+      where: { user_id: userId },
+    });
+    if (otherMembership) {
+      throw new ConflictException(
+        '이미 가입된 클럽이 있어 다른 클럽에 신청할 수 없습니다. 먼저 탈퇴 후 시도해주세요.',
+      );
+    }
+
     // 이미 대기 중인 신청이 있는지 확인
     const pendingRequest = await this.joinRequestRepository.findOne({
       where: { group_id: groupId, user_id: userId, status: JoinRequestStatus.PENDING },
@@ -886,5 +896,70 @@ export class GroupsService implements OnModuleInit {
       user_id: userId,
     });
     return { ok: true, group_deleted: false };
+  }
+
+  /**
+   * 회원 추방. 운영자(ADMIN)가 다른 일반 멤버를 클럽에서 제거한다.
+   *
+   * 차단 정책:
+   * - 호출자가 ADMIN이 아니면 ForbiddenException
+   * - 자기 자신을 추방하려고 하면 ConflictException (탈퇴 기능을 사용)
+   * - 대상이 클럽 멤버가 아니면 NotFoundException
+   * - 대상이 ADMIN이면 추방 불가 (다른 ADMIN끼리는 위임/해제 흐름을 따라야 함)
+   *
+   * 추방 성공 시 대상에게 CLUB_KICKED 알림을 발송한다.
+   */
+  async kickMember(
+    groupId: number,
+    actorUserId: string,
+    targetUserId: string,
+  ): Promise<{ ok: true }> {
+    if (actorUserId === targetUserId) {
+      throw new ConflictException('본인은 추방할 수 없습니다. 탈퇴 기능을 사용하세요.');
+    }
+
+    const group = await this.groupRepository.findOne({ where: { id: groupId } });
+    if (!group) {
+      throw new NotFoundException('클럽을 찾을 수 없습니다.');
+    }
+
+    const me = await this.groupMemberRepository.findOne({
+      where: { group_id: groupId, user_id: actorUserId },
+    });
+    if (!me || me.role !== GroupRole.ADMIN) {
+      throw new ForbiddenException('운영자만 회원을 추방할 수 있습니다.');
+    }
+
+    const target = await this.groupMemberRepository.findOne({
+      where: { group_id: groupId, user_id: targetUserId },
+    });
+    if (!target) {
+      throw new NotFoundException('해당 사용자는 이 클럽의 멤버가 아닙니다.');
+    }
+    if (target.role === GroupRole.ADMIN) {
+      throw new ConflictException(
+        '운영자는 추방할 수 없습니다. 운영자 권한을 위임받거나 본인이 직접 탈퇴하도록 안내해주세요.',
+      );
+    }
+
+    await this.groupMemberRepository.delete({
+      group_id: groupId,
+      user_id: targetUserId,
+    });
+
+    // 추방된 사용자에게 알림. 실패해도 추방 자체는 성공으로 처리.
+    void this.notificationsService
+      .create({
+        userId: targetUserId,
+        type: NotificationType.CLUB_KICKED,
+        title: '클럽에서 제거됨',
+        body: `${group.name} 클럽에서 운영자에 의해 제거되었습니다.`,
+        targetId: String(groupId),
+      })
+      .catch((err) =>
+        console.error('[Groups] 추방 알림 전송 실패:', err),
+      );
+
+    return { ok: true };
   }
 }

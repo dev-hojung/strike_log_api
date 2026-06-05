@@ -307,4 +307,20 @@ export class GroupsController {
   ) {
     return this.groupsService.leaveGroup(+id, currentUserId);
   }
+
+  @ApiOperation({
+    summary: '회원 추방',
+    description:
+      '운영자만 호출 가능. 일반 MEMBER만 추방할 수 있고 ADMIN/본인은 차단된다. 추방 시 대상에게 CLUB_KICKED 알림 발송.',
+  })
+  @ApiParam({ name: 'id', description: '클럽 ID', example: '1' })
+  @ApiParam({ name: 'userId', description: '추방 대상 사용자 UUID' })
+  @Delete(':id/members/:userId')
+  kickMember(
+    @Param('id') id: string,
+    @Param('userId') targetUserId: string,
+    @CurrentUser('id') currentUserId: string,
+  ) {
+    return this.groupsService.kickMember(+id, currentUserId, targetUserId);
+  }
 }

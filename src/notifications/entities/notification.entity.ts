@@ -23,6 +23,7 @@ export enum NotificationType {
   CLUB_TRIAL_EXPIRED = 'club_trial_expired',
   NEW_BEST_SCORE = 'new_best_score',
   BADGE_EARNED = 'badge_earned',
+  CLUB_KICKED = 'club_kicked',
 }
 
 /**

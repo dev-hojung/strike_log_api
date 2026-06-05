@@ -65,6 +65,7 @@
 | `GET` | `/groups/:id/members` | 클럽 멤버 목록 조회 |
 | `GET` | `/groups/:id/members-with-stats` | 클럽 멤버 목록 + 평균 점수 |
 | `POST` | `/groups/:id/members/:userId/promote` | 멤버를 운영자(ADMIN)로 승격 (운영자만) |
+| `DELETE` | `/groups/:id/members/:userId` | 회원 추방 (운영자만, ADMIN/본인은 차단) |
 | `DELETE` | `/groups/:id/leave` | 클럽 탈퇴 (유일 ADMIN+다른 멤버 있으면 409) |
 | `GET` | `/groups/me/pending-join-requests-count` | 내가 운영자인 클럽들의 pending 가입 신청 합계 (뱃지용) |
 

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository } from 'typeorm';
+import { Between, FindOperator, Repository } from 'typeorm';
 
 import { Game } from '../games/entities/game.entity';
 import { Frame } from '../games/entities/frame.entity';
@@ -31,7 +31,10 @@ export class ChallengesService {
     const games = await this.gameRepository.find({
       where: {
         user_id: userId,
-        play_date: Between(this._ymdKst(start), this._ymdKst(end)),
+        play_date: Between(
+          this._ymdKst(start),
+          this._ymdKst(end),
+        ) as unknown as FindOperator<Date>,
       },
       relations: ['frames'],
     });

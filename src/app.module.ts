@@ -14,6 +14,7 @@ import { EmailModule } from './email/email.module';
 import { GameRoomsModule } from './game-rooms/game-rooms.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { BadgesModule } from './badges/badges.module';
+import { ChallengesModule } from './challenges/challenges.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { BadgesModule } from './badges/badges.module';
     GameRoomsModule,
     NotificationsModule,
     BadgesModule,
+    ChallengesModule,
   ],
   controllers: [AppController],
   providers: [

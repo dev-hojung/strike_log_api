@@ -85,6 +85,7 @@ export class GroupsController {
     body: {
       name: string;
       description?: string;
+      activity_region?: string;
       cover_image_url?: string;
     },
   ) {
@@ -92,6 +93,7 @@ export class GroupsController {
       requester_id: userId,
       name: body.name,
       description: body.description,
+      activity_region: body.activity_region,
       cover_image_url: body.cover_image_url,
     });
   }

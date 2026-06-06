@@ -39,6 +39,13 @@ export class Group {
   description: string;
 
   /**
+   * 클럽 활동 지역 ("시/도 시/군/구" 단일 문자열, 예: "서울특별시 강남구").
+   * 검색·필터링 용도. 클라이언트는 시/도·시/군/구 드롭다운 두 단계로 입력 후 합쳐 전송.
+   */
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  activity_region: string | null;
+
+  /**
    * 클럽 대표(커버) 이미지
    */
   @Column({ nullable: true })

@@ -49,6 +49,7 @@ export class GroupsService implements OnModuleInit {
     requester_id: string;
     name: string;
     description?: string;
+    activity_region?: string;
     cover_image_url?: string;
   }) {
     const trimmedName = params.name?.trim();
@@ -90,6 +91,7 @@ export class GroupsService implements OnModuleInit {
       requester_id: params.requester_id,
       name: trimmedName,
       description: params.description ?? null,
+      activity_region: params.activity_region?.trim() || null,
       cover_image_url: params.cover_image_url ?? null,
       status: CreationRequestStatus.PENDING,
     });
@@ -153,6 +155,7 @@ export class GroupsService implements OnModuleInit {
     const group = await this.createGroup(req.requester_id, {
       name: req.name,
       description: req.description ?? undefined,
+      activity_region: req.activity_region,
       cover_image_url: req.cover_image_url ?? undefined,
     });
 
@@ -342,6 +345,7 @@ export class GroupsService implements OnModuleInit {
       id: group.id,
       name: group.name,
       description: group.description,
+      activity_region: group.activity_region,
       cover_image_url: group.cover_image_url,
       created_at: group.created_at,
       member_count: group.members?.length ?? 0,
@@ -407,6 +411,7 @@ export class GroupsService implements OnModuleInit {
         id: group.id,
         name: group.name,
         description: group.description,
+        activity_region: group.activity_region,
         cover_image_url: group.cover_image_url,
         created_at: group.created_at,
         memberCount: members.length,

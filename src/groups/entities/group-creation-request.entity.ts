@@ -47,6 +47,12 @@ export class GroupCreationRequest {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
+  /**
+   * 활동 지역 ("시/도 시/군/구"). 승인 시 Group으로 그대로 복사.
+   */
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  activity_region: string | null;
+
   @Column({ type: 'varchar', length: 500, nullable: true })
   cover_image_url: string | null;
 

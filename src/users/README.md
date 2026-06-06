@@ -35,6 +35,7 @@
 | `GET` | `/users/:id` | 유저 프로필 조회. 본인 또는 관리자만 접근 가능 |
 | `POST` | `/users/:id/change-password` | 비밀번호 변경. 현재 비밀번호 검증 후 새 비밀번호로 업데이트 |
 | `PATCH` | `/users/:id` | 프로필 수정 (닉네임, 프로필 이미지 URL, 전화번호). 본인만 수정 가능 |
+| `DELETE` | `/users/me` | 회원 탈퇴. FCM 토큰 직접 정리 + users 행 삭제(FK CASCADE로 게임/시리즈/멤버십 자동 정리) |
 
 ## 서비스 책임
 

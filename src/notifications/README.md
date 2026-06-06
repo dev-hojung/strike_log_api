@@ -13,7 +13,7 @@
 
 ### `Notification` (`src/notifications/entities/notification.entity.ts`)
 - DB 알림 레코드 (userId, type, title, body, targetId, actorId, actorNickname, isRead, createdAt)
-- 지원 타입: `CLUB_GAME_CREATED`, `CLUB_JOIN_REQUEST`, `CLUB_JOIN_APPROVED`, `CLUB_JOIN_REJECTED`, `CLUB_CREATION_REQUEST`, `CLUB_CREATION_APPROVED`, `CLUB_CREATION_REJECTED`, `CLUB_TRIAL_EXPIRING_SOON`, `CLUB_TRIAL_EXPIRED`, `NEW_BEST_SCORE`, `BADGE_EARNED`
+- 지원 타입: `CLUB_GAME_CREATED`, `CLUB_JOIN_REQUEST`, `CLUB_JOIN_APPROVED`, `CLUB_JOIN_REJECTED`, `CLUB_CREATION_REQUEST`, `CLUB_CREATION_APPROVED`, `CLUB_CREATION_REJECTED`, `CLUB_TRIAL_EXPIRING_SOON`, `CLUB_TRIAL_EXPIRED`, `NEW_BEST_SCORE`, `BADGE_EARNED`, `CLUB_KICKED`
 
 ### `FcmToken` (`src/notifications/entities/fcm-token.entity.ts`)
 - FCM 디바이스 토큰 저장 (token PK, userId, platform, createdAt, updatedAt)

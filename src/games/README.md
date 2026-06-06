@@ -29,10 +29,10 @@
 |------|------|------|
 | `POST` | `/games` | 새로운 게임 기록 생성 (frames, 총점, 위치, 클럽 게임 여부 등) |
 | `GET` | `/games/club/:room_id` | 같은 방 코드로 저장된 클럽 게임 참가자 전원 기록 조회 |
-| `GET` | `/games/users/:user_id/statistics` | 유저 통계 조회 (평균, 최고점, 최근 10게임, 월별 트렌드) — 본인/관리자만 |
+| `GET` | `/games/users/:user_id/statistics` | 유저 통계 조회 (종합/개인/클럽 평균, 최고점, 최근 10게임, 월별 트렌드) — 본인/관리자/**같은 클럽 멤버** |
 | `GET` | `/games/users/:user_id/recent` | 최근 게임 1건 상세 조회 — 본인/관리자만 |
 | `GET` | `/games/me` | 내 게임 기록 목록 조회 (최신순) |
-| `GET` | `/games/users/:user_id/monthly-frame-stats` | 이번 달 프레임 통계 (스트라이크/스페어/오픈/올커버 게임 수) — 본인/관리자만 |
+| `GET` | `/games/users/:user_id/monthly-frame-stats` | 이번 달 프레임 통계 (스트라이크/스페어/오픈/올커버 게임 수) — 본인/관리자/**같은 클럽 멤버** |
 | `GET` | `/games/:id/detail` | 게임 상세 기록 조회 (프레임 포함) — 본인만 |
 
 ### GameSeriesController
@@ -59,7 +59,8 @@
   - 게임 저장 시 동기로 평가해 응답에 `newly_earned_badges` 동봉
   - 배지 획득 알림은 fire-and-forget
 - **통계 조회**:
-  - 평균 점수, 최고점, 최근 10게임 트렌드
+  - 종합 평균(`averageScore`) + `is_club_game` 기준 분리 평균(`personalAverageScore`, `clubAverageScore`) + 각 게임 수
+  - 최고점 + 최근 10게임 트렌드
   - 월별 현황 (이번 달 vs 지난달 평균, 상승/하락율)
   - 월별 프레임 통계 (스트라이크, 스페어, 오픈, 올커버 게임 수)
 - **게임 상세 조회**: 권한 검증 (본인만 조회 가능)
@@ -96,6 +97,6 @@
 
 ## 권한 검증
 
-- 본인 또는 플랫폼 관리자만 다른 user_id 자원 접근 가능 (보수적 정책)
-- `assertSelfOrAdmin()`: user_id 기반 권한 체크
-- 게임 상세 조회, 통계 조회, 시리즈 조회 모두 적용
+- **기본:** 본인 또는 플랫폼 관리자만 다른 user_id 자원 접근 가능 (보수적 정책). `assertSelfOrAdmin()` 사용.
+- **통계 endpoint 한정 완화:** `getUserStatistics`, `getMonthlyFrameStats`는 `assertSelfOrAdminOrClubMate()`로 본인/관리자에 더해 **공유 클럽 멤버**까지 허용. `group_members` 셀프 JOIN으로 actor·target이 같은 클럽 멤버인지 확인 → 클럽 멤버 간 통계 비교 UX 지원.
+- 게임 상세 조회는 그대로 본인만.

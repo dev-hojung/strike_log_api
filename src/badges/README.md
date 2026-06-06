@@ -25,10 +25,14 @@
 - `checkAndAward()`: 사용자의 모든 배지 평가 → 신규 획득분만 DB insert → 신규 키 목록 반환
   - 이미 획득한 배지는 재평가 생략
   - 동시성 race condition은 UNIQUE 제약으로 자동 처리
+- `loadStatsForEvaluation()`: 평가에 필요한 사용자 통계 일괄 로드
+  - 시리즈 평균은 `game_series`에 점수 컬럼이 없으므로 자식 `games`를 SUM해서 계산
+  - `loadStrikesStats()`로 이력 전체 한 게임 최대 스트라이크/최장 연속 추출 (이력 평가 보장)
+  - `target_game_count=3`인 완주 시리즈 카운트를 별도 집계 → `series_3_full` 평가에 사용
 - `getStatusForUser()`: 전체 배지 + 획득 여부 조회
 - `getRecentEarned()`: 최근 획득 배지 N개 조회 (earned_at desc)
-- `computeCurrentStreak()`: 연속 play_date 기준 현재 streak (오늘/어제 이후만 유효)
-- `computeLongestStreak()`: 전체 play_date 시퀀스에서 최장 연속 구간
+- `computeCurrentStreak()` / `computeLongestStreak()`: 연속 play_date 기준 streak.
+  - **KST(Asia/Seoul) 기준** ymdToday/ymd 사용. Railway 호스트가 UTC라도 한국 자정 경계에서 어긋나지 않음.
 
 ## 카탈로그
 
@@ -48,6 +52,12 @@
 
 ## 트리거 지점
 
-배지 평가는 `src/games/games.service.ts`의 게임 저장/시리즈 완료 직후 호출:
-- 게임 저장 후: `checkAndAward(user_id, { savedGame: {...} })`
-- 시리즈 완료 후: `checkAndAward(userId, { completedSeries: {...} })`
+배지 평가는 다음 시점에 fire-and-forget 또는 동기로 호출:
+- 게임 저장 후 (`games.service.ts`): `checkAndAward(user_id, { savedGame: {...} })` — 동기, 응답에 `newly_earned_badges` 동봉
+- 시리즈 완료 후 (`game-series.service.ts`): `evaluateBadgesAndNotify(userId, { completedSeries })`
+- 클럽 신규 멤버십 발생 시 (`groups.service.ts`):
+  - 클럽 생성 직후 본인이 ADMIN으로 등록될 때
+  - 가입 신청 승인으로 멤버 추가될 때
+  - → `club_joined` 활성화를 위해 비동기 호출
+
+신규 배지 인서트 후 매 키에 대해 `notificationsService.create({ type: BADGE_EARNED })` 호출 → 앱 알림함 + FCM 푸시.

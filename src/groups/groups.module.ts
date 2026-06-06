@@ -7,13 +7,14 @@ import { Group } from './entities/group.entity';
 import { GroupMember } from './entities/group-member.entity';
 import { GroupJoinRequest } from './entities/group-join-request.entity';
 import { GroupCreationRequest } from './entities/group-creation-request.entity';
+import { GroupAnnouncement } from './entities/group-announcement.entity';
 import { Game } from '../games/entities/game.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { BadgesModule } from '../badges/badges.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Group, GroupMember, GroupJoinRequest, GroupCreationRequest, Game]),
+    TypeOrmModule.forFeature([Group, GroupMember, GroupJoinRequest, GroupCreationRequest, GroupAnnouncement, Game]),
     NotificationsModule,
     BadgesModule,
   ],

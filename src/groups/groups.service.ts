@@ -16,6 +16,7 @@ import {
   CreationRequestStatus,
   CreationRejectReason,
 } from './entities/group-creation-request.entity';
+import { GroupAnnouncement } from './entities/group-announcement.entity';
 import { Game } from '../games/entities/game.entity';
 import { User } from '../users/entities/user.entity';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -34,6 +35,8 @@ export class GroupsService implements OnModuleInit {
     private readonly joinRequestRepository: Repository<GroupJoinRequest>,
     @InjectRepository(GroupCreationRequest)
     private readonly creationRequestRepository: Repository<GroupCreationRequest>,
+    @InjectRepository(GroupAnnouncement)
+    private readonly announcementRepository: Repository<GroupAnnouncement>,
     @InjectRepository(Game)
     private readonly gameRepository: Repository<Game>,
     private readonly notificationsService: NotificationsService,
@@ -966,5 +969,142 @@ export class GroupsService implements OnModuleInit {
       );
 
     return { ok: true };
+  }
+
+  // ─── 클럽 공지사항 ──────────────────────────────────────
+
+  /**
+   * 클럽 공지 목록 조회. 클럽 멤버 누구나 호출 가능.
+   * 정렬: pinned desc → created_at desc.
+   */
+  async listAnnouncements(groupId: number, viewerUserId: string) {
+    await this.assertMembership(groupId, viewerUserId);
+    const rows = await this.announcementRepository.find({
+      where: { group_id: groupId },
+      relations: ['author'],
+      order: { pinned: 'DESC', created_at: 'DESC' },
+    });
+    return rows.map((a) => ({
+      id: a.id,
+      group_id: a.group_id,
+      title: a.title,
+      body: a.body,
+      pinned: a.pinned,
+      created_at: a.created_at,
+      updated_at: a.updated_at,
+      author: {
+        id: a.author?.id,
+        nickname: a.author?.nickname,
+        profile_image_url: a.author?.profile_image_url,
+      },
+    }));
+  }
+
+  /**
+   * 공지 생성. 운영자만 호출 가능.
+   * 작성 후 클럽 멤버 전원에게 CLUB_ANNOUNCEMENT 알림(작성자 제외).
+   */
+  async createAnnouncement(
+    groupId: number,
+    authorUserId: string,
+    params: { title: string; body: string; pinned?: boolean },
+  ) {
+    await this.assertAdmin(groupId, authorUserId);
+    const title = params.title?.trim();
+    const body = params.body?.trim();
+    if (!title || !body) {
+      throw new BadRequestException('제목과 본문을 모두 입력해주세요.');
+    }
+
+    const entity = this.announcementRepository.create({
+      group_id: groupId,
+      author_id: authorUserId,
+      title,
+      body,
+      pinned: params.pinned ?? false,
+    });
+    const saved = await this.announcementRepository.save(entity);
+
+    // 같은 클럽 멤버(작성자 제외)에게 알림 발송. 실패해도 작성 자체는 성공.
+    const memberRows = await this.groupMemberRepository.find({
+      where: { group_id: groupId },
+    });
+    const recipientIds = memberRows
+      .map((m) => m.user_id)
+      .filter((id) => id !== authorUserId);
+    const group = await this.groupRepository.findOne({ where: { id: groupId } });
+    if (recipientIds.length > 0) {
+      void this.notificationsService
+        .createBulk(recipientIds, {
+          type: NotificationType.CLUB_ANNOUNCEMENT,
+          title: `${group?.name ?? '클럽'} 공지`,
+          body: title,
+          targetId: String(saved.id),
+        })
+        .catch((err) =>
+          console.error('[Groups] 공지 알림 전송 실패:', err),
+        );
+    }
+
+    return saved;
+  }
+
+  /**
+   * 공지 수정. 운영자만.
+   */
+  async updateAnnouncement(
+    groupId: number,
+    announcementId: number,
+    actorUserId: string,
+    patch: { title?: string; body?: string; pinned?: boolean },
+  ) {
+    await this.assertAdmin(groupId, actorUserId);
+    const row = await this.announcementRepository.findOne({
+      where: { id: announcementId, group_id: groupId },
+    });
+    if (!row) throw new NotFoundException('공지를 찾을 수 없습니다.');
+
+    if (patch.title !== undefined) {
+      const t = patch.title.trim();
+      if (!t) throw new BadRequestException('제목은 비울 수 없습니다.');
+      row.title = t;
+    }
+    if (patch.body !== undefined) {
+      const b = patch.body.trim();
+      if (!b) throw new BadRequestException('본문은 비울 수 없습니다.');
+      row.body = b;
+    }
+    if (patch.pinned !== undefined) row.pinned = patch.pinned;
+
+    return this.announcementRepository.save(row);
+  }
+
+  /**
+   * 공지 삭제. 운영자만.
+   */
+  async deleteAnnouncement(
+    groupId: number,
+    announcementId: number,
+    actorUserId: string,
+  ): Promise<{ ok: true }> {
+    await this.assertAdmin(groupId, actorUserId);
+    const result = await this.announcementRepository.delete({
+      id: announcementId,
+      group_id: groupId,
+    });
+    if (result.affected === 0) {
+      throw new NotFoundException('공지를 찾을 수 없습니다.');
+    }
+    return { ok: true };
+  }
+
+  /** 멤버 여부 확인 (공지 조회 권한 검증용). 멤버가 아니면 ForbiddenException. */
+  private async assertMembership(groupId: number, userId: string): Promise<void> {
+    const exists = await this.groupMemberRepository.findOne({
+      where: { group_id: groupId, user_id: userId },
+    });
+    if (!exists && !isPlatformAdmin(userId)) {
+      throw new ForbiddenException('클럽 멤버만 접근할 수 있습니다.');
+    }
   }
 }

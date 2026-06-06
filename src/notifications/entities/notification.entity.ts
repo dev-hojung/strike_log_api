@@ -24,6 +24,7 @@ export enum NotificationType {
   NEW_BEST_SCORE = 'new_best_score',
   BADGE_EARNED = 'badge_earned',
   CLUB_KICKED = 'club_kicked',
+  CLUB_ANNOUNCEMENT = 'club_announcement',
 }
 
 /**

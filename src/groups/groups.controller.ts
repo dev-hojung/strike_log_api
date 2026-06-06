@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, GoneException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, GoneException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiBody, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { GroupsService } from './groups.service';
 import {
@@ -324,5 +324,56 @@ export class GroupsController {
     @CurrentUser('id') currentUserId: string,
   ) {
     return this.groupsService.kickMember(+id, currentUserId, targetUserId);
+  }
+
+  // ─── 클럽 공지사항 ──────────────────────────────────────
+
+  @ApiOperation({ summary: '클럽 공지 목록', description: '멤버만 조회 가능.' })
+  @ApiParam({ name: 'id', description: '클럽 ID' })
+  @Get(':id/announcements')
+  listAnnouncements(
+    @Param('id') id: string,
+    @CurrentUser('id') currentUserId: string,
+  ) {
+    return this.groupsService.listAnnouncements(+id, currentUserId);
+  }
+
+  @ApiOperation({
+    summary: '클럽 공지 작성',
+    description: '운영자만. 작성 후 멤버 전원에게 CLUB_ANNOUNCEMENT 알림 발송.',
+  })
+  @ApiParam({ name: 'id', description: '클럽 ID' })
+  @Post(':id/announcements')
+  createAnnouncement(
+    @Param('id') id: string,
+    @CurrentUser('id') currentUserId: string,
+    @Body() body: { title: string; body: string; pinned?: boolean },
+  ) {
+    return this.groupsService.createAnnouncement(+id, currentUserId, body);
+  }
+
+  @ApiOperation({ summary: '클럽 공지 수정', description: '운영자만.' })
+  @ApiParam({ name: 'id', description: '클럽 ID' })
+  @ApiParam({ name: 'aid', description: '공지 ID' })
+  @Patch(':id/announcements/:aid')
+  updateAnnouncement(
+    @Param('id') id: string,
+    @Param('aid') aid: string,
+    @CurrentUser('id') currentUserId: string,
+    @Body() body: { title?: string; body?: string; pinned?: boolean },
+  ) {
+    return this.groupsService.updateAnnouncement(+id, +aid, currentUserId, body);
+  }
+
+  @ApiOperation({ summary: '클럽 공지 삭제', description: '운영자만.' })
+  @ApiParam({ name: 'id', description: '클럽 ID' })
+  @ApiParam({ name: 'aid', description: '공지 ID' })
+  @Delete(':id/announcements/:aid')
+  deleteAnnouncement(
+    @Param('id') id: string,
+    @Param('aid') aid: string,
+    @CurrentUser('id') currentUserId: string,
+  ) {
+    return this.groupsService.deleteAnnouncement(+id, +aid, currentUserId);
   }
 }

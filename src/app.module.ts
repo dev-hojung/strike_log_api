@@ -15,6 +15,7 @@ import { GameRoomsModule } from './game-rooms/game-rooms.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { BadgesModule } from './badges/badges.module';
 import { ChallengesModule } from './challenges/challenges.module';
+import { SystemNoticesModule } from './system-notices/system-notices.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { ChallengesModule } from './challenges/challenges.module';
     NotificationsModule,
     BadgesModule,
     ChallengesModule,
+    SystemNoticesModule,
   ],
   controllers: [AppController],
   providers: [

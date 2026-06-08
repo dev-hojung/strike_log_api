@@ -31,7 +31,6 @@
 |------|------|------|
 | `POST` | `/users/login` | 이메일/비밀번호로 로그인. JWT 토큰과 사용자 정보 반환 |
 | `POST` | `/users/signup` | 이메일/비밀번호로 회원가입. 닉네임 선택 입력 시 이메일 아이디 자동 설정 |
-| `POST` | `/users/sync` | Supabase Auth 성공 후 DB에 사용자 동기화 (없으면 생성) |
 | `GET` | `/users/:id` | 유저 프로필 조회. 본인 또는 관리자만 접근 가능 |
 | `POST` | `/users/:id/change-password` | 비밀번호 변경. 현재 비밀번호 검증 후 새 비밀번호로 업데이트 |
 | `PATCH` | `/users/:id` | 프로필 수정 (닉네임, 프로필 이미지 URL, 전화번호). 본인만 수정 가능 |

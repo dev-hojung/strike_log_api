@@ -75,6 +75,9 @@ export class UsersService {
 
   /**
    * 이메일과 비밀번호를 사용하여 로그인을 진행합니다.
+   *
+   * 모든 경로에서 반드시 비밀번호 검증을 거치도록 한다.
+   * (이전 구현은 user.password가 NULL이면 어떤 비밀번호든 통과되는 버그가 있었음)
    */
   async login(email: string, password?: string) {
     const user = await this.userRepository.findOne({ where: { email } });
@@ -82,13 +85,18 @@ export class UsersService {
       throw new UnauthorizedException('이메일 또는 비밀번호가 일치하지 않습니다.');
     }
 
-    if (user.password && password) {
-      const isPasswordValid = await bcrypt.compare(password, user.password);
-      if (!isPasswordValid) {
-        throw new UnauthorizedException('이메일 또는 비밀번호가 일치하지 않습니다.');
-      }
-    } else if (user.password && !password) {
+    // 비밀번호 미설정 계정(예: syncUser로 생성된 OAuth 임시 계정)은 로그인 자체를 차단.
+    // 가입을 완료해서 비밀번호를 설정한 뒤 로그인해야 한다.
+    if (!user.password) {
+      throw new UnauthorizedException('이메일 또는 비밀번호가 일치하지 않습니다.');
+    }
+    if (!password) {
       throw new UnauthorizedException('비밀번호를 입력해주세요.');
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('이메일 또는 비밀번호가 일치하지 않습니다.');
     }
 
     return this.issueToken(user);

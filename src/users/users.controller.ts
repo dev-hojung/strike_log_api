@@ -39,25 +39,6 @@ export class UsersController {
     return this.usersService.signup(body.email, body.password, body.nickname);
   }
 
-  /**
-   * 로그인 후 호출: DB에 유저가 없으면 생성, 있으면 반환
-   */
-  @ApiOperation({ summary: '소셜 로그인 후 유저 동기화 (없으면 생성)' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['id', 'email'],
-      properties: {
-        id: { type: 'string', example: 'uuid-1234' },
-        email: { type: 'string', example: 'user@example.com' },
-      },
-    },
-  })
-  @Public()
-  @Post('sync')
-  syncUser(@Body() body: { id: string; email: string }) {
-    return this.usersService.syncUser(body.id, body.email);
-  }
 
   /**
    * 내 정보 조회

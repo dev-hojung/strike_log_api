@@ -52,17 +52,6 @@ describe('UsersController', () => {
     });
   });
 
-  describe('syncUser', () => {
-    it('should call usersService.syncUser', async () => {
-      const syncDto = { id: 'uuid', email: 'test@example.com' };
-      const result = { ...syncDto, nickname: 'tester' };
-      mockUsersService.syncUser.mockResolvedValue(result);
-
-      expect(await controller.syncUser(syncDto)).toEqual(result);
-      expect(service.syncUser).toHaveBeenCalledWith(syncDto.id, syncDto.email);
-    });
-  });
-
   describe('getProfile', () => {
     it('본인 프로필 조회는 service.getProfile을 호출한다', async () => {
       const userId = 'uuid';

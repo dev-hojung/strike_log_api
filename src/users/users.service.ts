@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -43,6 +44,13 @@ export class UsersService {
    * @throws ConflictException 이미 존재하는 이메일일 경우 발생
    */
   async signup(email: string, password?: string, nickname?: string) {
+    // 비밀번호 필수. 빈 문자열도 허용 안 함 — 이전 구현은 password 누락 시 NULL로 저장되어
+    // 이후 어떤 비밀번호로도 로그인 통과되는 버그가 있었음 (login 수정으로 차단됐지만
+    // 가입 단계에서도 함께 막아 부적합 계정 자체가 안 생기게 한다).
+    if (!password || password.length < 8) {
+      throw new BadRequestException('비밀번호는 8자 이상이어야 합니다.');
+    }
+
     const existingUser = await this.userRepository.findOne({
       where: { email },
     });
@@ -51,12 +59,8 @@ export class UsersService {
     }
 
     const id = randomUUID();
-    let hashedPassword = undefined;
-
-    if (password) {
-      const salt = await bcrypt.genSalt();
-      hashedPassword = await bcrypt.hash(password, salt);
-    }
+    const salt = await bcrypt.genSalt();
+    const hashedPassword = await bcrypt.hash(password, salt);
 
     const user = this.userRepository.create({
       id,

@@ -18,8 +18,13 @@ export class NotificationsService {
   /**
    * FCM 토큰 등록 (upsert).
    * 동일 token이 이미 다른 userId로 저장돼 있으면 소유권 이전.
+   * userId=null이면 로그아웃 상태 디바이스 (시스템 공지 푸시는 받음, 개인 알림은 미수신).
    */
-  async registerFcmToken(userId: string, token: string, platform: string): Promise<void> {
+  async registerFcmToken(
+    userId: string | null,
+    token: string,
+    platform: string,
+  ): Promise<void> {
     await this.fcmTokenRepository.upsert(
       { token, userId, platform },
       { conflictPaths: ['token'], skipUpdateIfNoValuesChanged: true },

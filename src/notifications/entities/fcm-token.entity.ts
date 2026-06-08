@@ -9,9 +9,10 @@ export class FcmToken {
   @PrimaryColumn({ type: 'varchar', length: 255 })
   token: string;
 
+  /** 로그아웃 디바이스/가입 전 디바이스는 null */
   @Index()
-  @Column({ type: 'uuid' })
-  userId: string;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  userId: string | null;
 
   @Column({ type: 'varchar', length: 16 })
   platform: string;

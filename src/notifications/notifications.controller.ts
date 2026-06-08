@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Logger, Param, Post } from '@nestjs/comm
 import { ApiTags, ApiOperation, ApiParam, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { Public } from '../auth/public.decorator';
 
 @ApiTags('notifications')
 @ApiBearerAuth('access-token')
@@ -76,6 +77,36 @@ export class NotificationsController {
       `[fcm-token register] user=${userId} platform=${body.platform} token=${body.token?.slice(0, 16)}...`,
     );
     await this.notificationsService.registerFcmToken(userId, body.token, body.platform);
+    return { ok: true };
+  }
+
+  /**
+   * 익명(로그아웃 / 가입 전) 디바이스 토큰 등록.
+   * userId=null로 저장돼 개인 알림은 안 받지만 시스템 공지 같은 broadcast 푸시는 수신.
+   * 같은 token이 이미 사용자에 바인딩돼 있으면 해당 바인딩이 NULL로 덮어써짐 — 로그아웃 흐름과 일관됨.
+   */
+  @Public()
+  @ApiOperation({
+    summary: '익명 FCM 디바이스 토큰 등록 (로그아웃 디바이스 / 가입 전)',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        token: { type: 'string' },
+        platform: { type: 'string', example: 'android' },
+      },
+      required: ['token', 'platform'],
+    },
+  })
+  @Post('fcm-token')
+  async registerAnonymousFcmToken(
+    @Body() body: { token: string; platform: string },
+  ) {
+    this.logger.log(
+      `[fcm-token register anonymous] platform=${body.platform} token=${body.token?.slice(0, 16)}...`,
+    );
+    await this.notificationsService.registerFcmToken(null, body.token, body.platform);
     return { ok: true };
   }
 

@@ -116,4 +116,28 @@ export class EmailService {
     );
     return false;
   }
+
+  /**
+   * 비밀번호 재설정 등 1회성 검증 시 사용.
+   * 코드가 일치하고 5분 이내라면 즉시 행을 삭제(소비)하고 true.
+   * 동일 OTP로 두 번째 시도 시 false (재사용 방지).
+   */
+  async consumeOtp(email: string, code: string): Promise<boolean> {
+    const authRecord = await this.emailAuthRepository.findOne({
+      where: { email },
+      order: { created_at: 'DESC' },
+    });
+    if (!authRecord) return false;
+
+    const diffMins =
+      (Date.now() - new Date(authRecord.created_at).getTime()) / (1000 * 60);
+    if (diffMins > 5) {
+      await this.emailAuthRepository.delete(authRecord.id);
+      return false;
+    }
+    if (authRecord.code !== code) return false;
+
+    await this.emailAuthRepository.delete(authRecord.id);
+    return true;
+  }
 }

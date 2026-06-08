@@ -13,6 +13,7 @@ import { randomUUID } from 'crypto';
 import { User } from './entities/user.entity';
 import { FcmToken } from '../notifications/entities/fcm-token.entity';
 import { JwtPayload } from '../auth/jwt.strategy';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class UsersService {
@@ -22,6 +23,7 @@ export class UsersService {
     @InjectRepository(FcmToken)
     private readonly fcmTokenRepository: Repository<FcmToken>,
     private readonly jwtService: JwtService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -124,6 +126,47 @@ export class UsersService {
       throw new NotFoundException('유저를 찾을 수 없습니다.');
     }
     return user;
+  }
+
+  /**
+   * 이메일 OTP 검증 후 비밀번호 재설정 (forgot-password 플로우).
+   *
+   * 보안 고려:
+   *   - OTP는 EmailService.consumeOtp가 1회성으로 소비 (재사용 방지)
+   *   - 사용자 존재 누설 방지를 위해 모든 실패는 동일한 401 메시지로 반환
+   *   - newPassword 8자 이상 강제
+   *
+   * 흐름: 앱이 먼저 /email/send-otp + /email/verify-otp로 사용자 확인 → 본 엔드포인트로
+   * 새 비밀번호 + 같은 OTP 코드 다시 보내서 소비 + 비밀번호 갱신.
+   */
+  async resetPasswordWithOtp(
+    email: string,
+    code: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    if (!newPassword || newPassword.length < 8) {
+      throw new BadRequestException('비밀번호는 8자 이상이어야 합니다.');
+    }
+    if (!email || !code) {
+      throw new BadRequestException('인증번호가 일치하지 않거나 만료되었습니다.');
+    }
+
+    const consumed = await this.emailService.consumeOtp(email, code);
+    if (!consumed) {
+      throw new UnauthorizedException('인증번호가 일치하지 않거나 만료되었습니다.');
+    }
+
+    const user = await this.userRepository.findOne({ where: { email } });
+    if (!user) {
+      // OTP는 이미 소비됐지만 사용자가 없으면 의미 없음. 동일한 메시지로 응답.
+      throw new UnauthorizedException('인증번호가 일치하지 않거나 만료되었습니다.');
+    }
+
+    const salt = await bcrypt.genSalt();
+    user.password = await bcrypt.hash(newPassword, salt);
+    await this.userRepository.save(user);
+
+    return { message: '비밀번호가 변경되었습니다.' };
   }
 
   /**

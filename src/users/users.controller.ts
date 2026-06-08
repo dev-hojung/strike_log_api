@@ -60,6 +60,36 @@ export class UsersController {
   }
 
   /**
+   * 비밀번호 재설정 (로그아웃 상태 / OTP 기반).
+   *
+   * 흐름: 앱이 미리 /email/send-otp + /email/verify-otp로 사용자 확인 →
+   *      본 엔드포인트로 OTP + 새 비밀번호 함께 전송 → 서버에서 OTP 1회 소비 후 갱신.
+   */
+  @ApiOperation({ summary: '비밀번호 재설정 (이메일 OTP 기반)' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['email', 'code', 'newPassword'],
+      properties: {
+        email: { type: 'string', example: 'user@example.com' },
+        code: { type: 'string', example: '123456' },
+        newPassword: { type: 'string', example: 'newPass8plus' },
+      },
+    },
+  })
+  @Public()
+  @Post('forgot-password/reset')
+  resetPasswordWithOtp(
+    @Body() body: { email: string; code: string; newPassword: string },
+  ) {
+    return this.usersService.resetPasswordWithOtp(
+      body.email,
+      body.code,
+      body.newPassword,
+    );
+  }
+
+  /**
    * 비밀번호 변경
    */
   @ApiOperation({ summary: '비밀번호 변경' })

@@ -6,8 +6,23 @@
 
 | Method | Path | 인증 | 설명 |
 |---|---|---|---|
-| GET | `/system-notices/active` | Public | 현재 활성 공지 목록 (앱이 모달로 표시) |
+| GET | `/system-notices/active` | Public | **모달 대상** 공지만. 푸시 발송된 공지는 제외 |
 | POST | `/system-notices` | `X-Admin-Token` 헤더 = `ADMIN_API_KEY` | 공지 등록 + (옵션) 즉시 전체 디바이스 푸시 |
+
+## 모달 vs 푸시 (배타적)
+
+같은 공지를 푸시 + 모달로 동시 노출하면 중복이라 한쪽만 가게 한다.
+
+- `last_pushed_at IS NULL` → 푸시 안 됐음 → /active에 포함 → 앱에서 모달
+- `last_pushed_at IS NOT NULL` → 이미 푸시 발송 → /active에서 제외 → 모달 안 뜸
+
+즉 **푸시로 발송한 공지는 모달 안 뜸, 모달 전용 공지는 푸시 안 감.**
+
+| 사용 케이스 | POST 옵션 | 결과 |
+|---|---|---|
+| 일회성 푸시 알림 (이벤트, 점검) | `push_immediately:true` (기본) | 푸시만, 모달 X |
+| 매일 9시 푸시 | `repeat_daily:true` | 매일 푸시, 모달 X |
+| 모달로만 강조 (앱 열 때 안내) | `push_immediately:false` | 모달만, 푸시 X |
 
 ### POST 요청 본문
 

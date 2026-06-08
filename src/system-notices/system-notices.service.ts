@@ -21,16 +21,20 @@ export class SystemNoticesService {
   ) {}
 
   /**
-   * 현재 시점에 노출돼야 할 공지 목록.
+   * 현재 시점에 모달로 띄울 공지 목록.
    *
-   * 조건: starts_at IS NULL or starts_at <= now AND ends_at IS NULL or ends_at >= now.
-   * 우선순위 정렬은 클라이언트가 결정 — 여기서는 최신 등록순으로 내려보낸다.
+   * 정책: 푸시로 발송된 공지는 모달 노출 제외 (중복 노출 방지).
+   *   - last_pushed_at IS NULL → 푸시 안 보낸 모달 전용 공지
+   *   - last_pushed_at IS NOT NULL → 푸시로 이미 전달했으므로 모달 생략
+   *
+   * starts_at/ends_at 윈도우 안에 있는 항목만.
    */
   async getActive(): Promise<SystemNotice[]> {
     const now = new Date();
     return this.noticeRepository
       .createQueryBuilder('n')
-      .where('(n.starts_at IS NULL OR n.starts_at <= :now)', { now })
+      .where('n.last_pushed_at IS NULL')
+      .andWhere('(n.starts_at IS NULL OR n.starts_at <= :now)', { now })
       .andWhere('(n.ends_at IS NULL OR n.ends_at >= :now)', { now })
       .orderBy('n.created_at', 'DESC')
       .getMany();

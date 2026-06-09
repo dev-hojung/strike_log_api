@@ -74,7 +74,7 @@ export class BadgesService {
       return { ymd, newlyRecorded: false, newlyEarnedBadges: [] };
     }
 
-    const newlyEarnedBadges = await this.evaluateAndAward(userId);
+    const newlyEarnedBadges = await this.checkAndAward(userId);
     return { ymd, newlyRecorded: true, newlyEarnedBadges };
   }
 

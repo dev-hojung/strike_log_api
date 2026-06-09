@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserBadge } from './entities/user-badge.entity';
+import { AttendanceLog } from './entities/attendance-log.entity';
 import { BADGE_CATALOG, BadgeDefinition } from './badge-catalog';
 import { Game } from '../games/entities/game.entity';
 import { Frame } from '../games/entities/frame.entity';
@@ -33,6 +34,8 @@ export class BadgesService {
   constructor(
     @InjectRepository(UserBadge)
     private readonly userBadgeRepository: Repository<UserBadge>,
+    @InjectRepository(AttendanceLog)
+    private readonly attendanceRepository: Repository<AttendanceLog>,
     @InjectRepository(Game)
     private readonly gameRepository: Repository<Game>,
     @InjectRepository(GameSeries)
@@ -40,6 +43,40 @@ export class BadgesService {
     @InjectRepository(GroupMember)
     private readonly groupMemberRepository: Repository<GroupMember>,
   ) {}
+
+  /**
+   * 앱 접속 시 출석 1회 기록.
+   * 같은 KST 날짜에 여러 번 호출되어도 idempotent (PK 충돌 무시).
+   * 호출 후 신규 streak 배지를 평가해서 결과 반환.
+   */
+  async recordAttendance(userId: string): Promise<{
+    ymd: string;
+    newlyRecorded: boolean;
+    newlyEarnedBadges: string[];
+  }> {
+    const ymd = ymdToday();
+    // PK가 (user_id, ymd_kst)라 같은 날 INSERT IGNORE 효과를 query builder로 구현.
+    const result = await this.attendanceRepository
+      .createQueryBuilder()
+      .insert()
+      .into(AttendanceLog)
+      .values({ user_id: userId, ymd_kst: ymd })
+      .orIgnore()
+      .execute();
+
+    // raw.affectedRows가 1이면 신규, 0이면 중복.
+    const newlyRecorded = result.identifiers.length > 0 ||
+      // 일부 드라이버에서 identifiers가 비어도 raw.affectedRows로 확인.
+      ((result as unknown as { raw?: { affectedRows?: number } }).raw?.affectedRows ?? 0) > 0;
+
+    // 첫 출석이 아니면 배지 평가 비용 절약.
+    if (!newlyRecorded) {
+      return { ymd, newlyRecorded: false, newlyEarnedBadges: [] };
+    }
+
+    const newlyEarnedBadges = await this.evaluateAndAward(userId);
+    return { ymd, newlyRecorded: true, newlyEarnedBadges };
+  }
 
   /**
    * 사용자의 모든 배지를 평가하고, 신규 획득분만 DB에 insert한 뒤 신규 키 목록을 반환.
@@ -303,11 +340,13 @@ export class BadgesService {
    * 최근 기록일이 오늘 또는 어제여야 인정.
    */
   async computeCurrentStreak(userId: string): Promise<number> {
-    const rows = await this.gameRepository
-      .createQueryBuilder('g')
-      .select('DISTINCT DATE_FORMAT(g.play_date, "%Y-%m-%d")', 'd')
-      .where('g.user_id = :userId', { userId })
-      .orderBy('d', 'DESC')
+    // 출석 기준: attendance_logs.ymd_kst (앱 접속 기록).
+    // (이전 구현: games.play_date 기반 — 게임 기록 없으면 streak 안 누적되던 문제)
+    const rows = await this.attendanceRepository
+      .createQueryBuilder('a')
+      .select('a.ymd_kst', 'd')
+      .where('a.user_id = :userId', { userId })
+      .orderBy('a.ymd_kst', 'DESC')
       .limit(400)
       .getRawMany<{ d: string }>();
 
@@ -339,11 +378,11 @@ export class BadgesService {
    * 최장 streak — 전체 distinct play_date 시퀀스에서 연속 구간 최댓값.
    */
   async computeLongestStreak(userId: string): Promise<number> {
-    const rows = await this.gameRepository
-      .createQueryBuilder('g')
-      .select('DISTINCT DATE_FORMAT(g.play_date, "%Y-%m-%d")', 'd')
-      .where('g.user_id = :userId', { userId })
-      .orderBy('d', 'ASC')
+    const rows = await this.attendanceRepository
+      .createQueryBuilder('a')
+      .select('a.ymd_kst', 'd')
+      .where('a.user_id = :userId', { userId })
+      .orderBy('a.ymd_kst', 'ASC')
       .getRawMany<{ d: string }>();
     const dates = rows.map((r) => r.d);
     if (dates.length === 0) return 0;

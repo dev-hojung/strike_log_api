@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BadgesService } from './badges.service';
 import { BadgesController } from './badges.controller';
 import { UserBadge } from './entities/user-badge.entity';
+import { AttendanceLog } from './entities/attendance-log.entity';
 import { Game } from '../games/entities/game.entity';
 import { GameSeries } from '../games/entities/game-series.entity';
 import { GroupMember } from '../groups/entities/group-member.entity';
@@ -13,7 +14,13 @@ import { GroupMember } from '../groups/entities/group-member.entity';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserBadge, Game, GameSeries, GroupMember]),
+    TypeOrmModule.forFeature([
+      UserBadge,
+      AttendanceLog,
+      Game,
+      GameSeries,
+      GroupMember,
+    ]),
   ],
   controllers: [BadgesController],
   providers: [BadgesService],

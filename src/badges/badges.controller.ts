@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
 import { BadgesService } from './badges.service';
 import { CurrentUser } from '../auth/current-user.decorator';
 
@@ -36,5 +36,27 @@ export class BadgesController {
       this.badgesService.computeLongestStreak(userId),
     ]);
     return { currentStreak: current, longestStreak: longest };
+  }
+
+  /**
+   * 오늘 출석 체크 (앱 시작/로그인 시 호출).
+   * 같은 KST 날짜에 여러 번 호출돼도 idempotent.
+   * 신규 출석이면 streak 배지 평가 후 갱신된 streak + 신규 배지 키 반환.
+   */
+  @Post('attendance/me/check-in')
+  @HttpCode(HttpStatus.OK)
+  async checkIn(@CurrentUser('id') userId: string) {
+    const result = await this.badgesService.recordAttendance(userId);
+    const [current, longest] = await Promise.all([
+      this.badgesService.computeCurrentStreak(userId),
+      this.badgesService.computeLongestStreak(userId),
+    ]);
+    return {
+      ymd: result.ymd,
+      newlyRecorded: result.newlyRecorded,
+      newlyEarnedBadges: result.newlyEarnedBadges,
+      currentStreak: current,
+      longestStreak: longest,
+    };
   }
 }

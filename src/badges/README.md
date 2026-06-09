@@ -4,12 +4,13 @@
 
 사용자의 보링 게임 성취를 인정하는 배지 시스템과 일일 출석 streak을 관리하는 모듈입니다.
 - 게임 저장 또는 시리즈 완료 직후 배지 평가 (6가지 카테고리 25개 배지)
-- 현재/최장 출석 streak 계산 (연속 play_date 기준)
+- 현재/최장 출석 streak 계산 (**앱 접속일** 기준 — `attendance_logs.ymd_kst` 시퀀스)
 - 사용자별 배지 상태 조회 (획득 여부 + 획득일시)
 
 ## 엔티티
 
 - `UserBadge` (`entities/user-badge.entity.ts`): 사용자가 획득한 배지 레코드 (user_id, badge_key 복합 UNIQUE)
+- `AttendanceLog` (`entities/attendance-log.entity.ts`): 일일 출석 로그. PK (user_id, ymd_kst)로 같은 날 중복 호출 idempotent
 
 ## 컨트롤러 엔드포인트
 
@@ -18,6 +19,7 @@
 | GET | `/badges/me` | 사용자 전체 배지 카탈로그 (잠금/해금 상태 + 획득일) |
 | GET | `/badges/me/recent` | 최근 획득 배지 (limit 파라미터, 기본 5개) |
 | GET | `/attendance/me/streak` | 출석 streak 요약 (현재 + 최장, 홈 카드용) |
+| POST | `/attendance/me/check-in` | 오늘 출석 기록 (앱 시작/로그인 시 호출, idempotent) |
 
 ## 서비스 책임
 
@@ -31,7 +33,8 @@
   - `target_game_count=3`인 완주 시리즈 카운트를 별도 집계 → `series_3_full` 평가에 사용
 - `getStatusForUser()`: 전체 배지 + 획득 여부 조회
 - `getRecentEarned()`: 최근 획득 배지 N개 조회 (earned_at desc)
-- `computeCurrentStreak()` / `computeLongestStreak()`: 연속 play_date 기준 streak.
+- `recordAttendance()`: 오늘 KST 날짜를 attendance_logs에 INSERT IGNORE. 신규 출석이면 streak 배지 재평가.
+- `computeCurrentStreak()` / `computeLongestStreak()`: `attendance_logs.ymd_kst` distinct 시퀀스 기반.
   - **KST(Asia/Seoul) 기준** ymdToday/ymd 사용. Railway 호스트가 UTC라도 한국 자정 경계에서 어긋나지 않음.
 
 ## 카탈로그

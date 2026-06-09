@@ -9,13 +9,13 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  */
 export class CreateAttendanceLogs1791000000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
+    // users.id는 운영 DB에서 VARCHAR(255)로 저장돼 있어 FK 컬럼 타입을 동일하게 맞춘다.
     await queryRunner.query(`
       CREATE TABLE \`attendance_logs\` (
-        \`user_id\` VARCHAR(36) NOT NULL,
+        \`user_id\` VARCHAR(255) NOT NULL,
         \`ymd_kst\` CHAR(10) NOT NULL,
         \`created_at\` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
         PRIMARY KEY (\`user_id\`, \`ymd_kst\`),
-        INDEX \`IDX_attendance_logs_user_date\` (\`user_id\`, \`ymd_kst\`),
         CONSTRAINT \`FK_attendance_logs_user\` FOREIGN KEY (\`user_id\`)
           REFERENCES \`users\`(\`id\`) ON DELETE CASCADE
       ) ENGINE=InnoDB

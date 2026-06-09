@@ -15,7 +15,7 @@ import {
 @Entity('attendance_logs')
 @Index('IDX_attendance_logs_user_date', ['user_id', 'ymd_kst'])
 export class AttendanceLog {
-  @PrimaryColumn({ type: 'varchar', length: 36 })
+  @PrimaryColumn({ type: 'varchar', length: 255 })
   user_id: string;
 
   /** KST 기준 yyyy-MM-dd */

@@ -21,7 +21,10 @@ export class EmailService {
     this.resend = new Resend(apiKey || 'your_resend_api_key');
   }
 
-  async sendOtp(email: string): Promise<boolean> {
+  async sendOtp(
+    email: string,
+    purpose: 'signup' | 'reset' = 'signup',
+  ): Promise<boolean> {
     try {
       const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -36,22 +39,28 @@ export class EmailService {
       await this.emailAuthRepository.save(emailAuth);
 
       // 개발/테스트 편의를 위해 발급된 OTP를 콘솔에 출력합니다.
-      console.log(`[Email Auth OTP] To: ${email}, Code: ${otpCode}`);
+      console.log(`[Email Auth OTP/${purpose}] To: ${email}, Code: ${otpCode}`);
 
-      // 인증된 도메인 발신 주소.
-      // Railway env `RESEND_FROM_ADDRESS`로 오버라이드 가능 (도메인 변경 시 코드 수정 불필요).
       const fromAddress =
         this.configService.get<string>('RESEND_FROM_ADDRESS') ??
         'Strike Log <noreply@strikelog.xyz>';
 
+      const isReset = purpose === 'reset';
+      const subject = isReset
+        ? '[STRIKE LOG] 비밀번호 재설정 인증번호'
+        : '[STRIKE LOG] 회원가입 인증번호';
+      const purposeLine = isReset
+        ? '비밀번호 재설정을 위한 인증번호는'
+        : '회원가입을 위한 인증번호는';
+
       const { error } = await this.resend.emails.send({
         from: fromAddress,
         to: email,
-        subject: '[STRIKE LOG] 회원가입 인증번호',
+        subject,
         html: `<div style="font-family: sans-serif; padding: 20px;">
                 <h2 style="color: #1A5CFF;">STRIKE LOG</h2>
                 <p>안녕하세요!</p>
-                <p>회원가입을 위한 인증번호는 <strong>${otpCode}</strong> 입니다.</p>
+                <p>${purposeLine} <strong>${otpCode}</strong> 입니다.</p>
                 <p>인증번호는 5분간 유효합니다. 앱에서 입력해주세요.</p>
                </div>`,
       });

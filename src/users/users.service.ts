@@ -86,13 +86,16 @@ export class UsersService {
    * (이전 구현은 user.password가 NULL이면 어떤 비밀번호든 통과되는 버그가 있었음)
    */
   async login(email: string, password?: string) {
-    const user = await this.userRepository.findOne({ where: { email } });
+    // password 컬럼은 엔티티에 select: false로 선언돼 있어 findOne 기본 SELECT에서 빠진다.
+    // 검증을 위해 명시적으로 가져온다.
+    const user = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.email = :email', { email })
+      .addSelect('user.password')
+      .getOne();
     if (!user) {
       throw new UnauthorizedException('이메일 또는 비밀번호가 일치하지 않습니다.');
     }
-
-    // 비밀번호 미설정 계정(예: syncUser로 생성된 OAuth 임시 계정)은 로그인 자체를 차단.
-    // 가입을 완료해서 비밀번호를 설정한 뒤 로그인해야 한다.
     if (!user.password) {
       throw new UnauthorizedException('이메일 또는 비밀번호가 일치하지 않습니다.');
     }
@@ -173,7 +176,15 @@ export class UsersService {
    * 비밀번호 변경
    */
   async changePassword(id: string, currentPassword: string, newPassword: string) {
-    const user = await this.userRepository.findOne({ where: { id } });
+    if (!newPassword || newPassword.length < 8) {
+      throw new BadRequestException('비밀번호는 8자 이상이어야 합니다.');
+    }
+    // password는 select: false라 명시적으로 가져와야 한다.
+    const user = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.id = :id', { id })
+      .addSelect('user.password')
+      .getOne();
     if (!user) {
       throw new NotFoundException('유저를 찾을 수 없습니다.');
     }

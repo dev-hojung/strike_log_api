@@ -23,11 +23,12 @@ export class EmailController {
     },
   })
   @Post('send-otp')
-  async sendOtp(@Body('email') email: string) {
-    if (!email) {
+  async sendOtp(@Body() body: { email: string; purpose?: 'signup' | 'reset' }) {
+    if (!body?.email) {
       throw new BadRequestException('이메일이 필요합니다.');
     }
-    await this.emailService.sendOtp(email);
+    const purpose = body.purpose === 'reset' ? 'reset' : 'signup';
+    await this.emailService.sendOtp(body.email, purpose);
     return { success: true, message: '인증번호가 발송되었습니다.' };
   }
 

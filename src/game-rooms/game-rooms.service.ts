@@ -4,7 +4,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 
 import { GroupMember } from '../groups/entities/group-member.entity';
-import { GameRoom, GameRoomStatus } from './entities/game-room.entity';
+import { Game } from '../games/entities/game.entity';
+import {
+  GameRoom,
+  GameRoomMode,
+  GameRoomStatus,
+} from './entities/game-room.entity';
 import { GameRoomParticipant } from './entities/game-room-participant.entity';
 
 export interface RoomParticipant {
@@ -25,7 +30,13 @@ export interface GameRoomState {
   roomId: string;
   hostId: string;
   status: GameRoomStatus;
-  participants: Record<string, RoomParticipant>;
+  mode: GameRoomMode;
+  betMemo: string | null;
+  maxPlayers: number;
+  participants: Record<
+    string,
+    RoomParticipant & { handicap?: number }
+  >;
   createdAt: Date;
 }
 
@@ -56,6 +67,8 @@ export class GameRoomsService {
     private readonly roomRepository: Repository<GameRoom>,
     @InjectRepository(GameRoomParticipant)
     private readonly participantRepository: Repository<GameRoomParticipant>,
+    @InjectRepository(Game)
+    private readonly gameRepository: Repository<Game>,
   ) {}
 
   async isClubUser(userId: string): Promise<boolean> {
@@ -68,11 +81,31 @@ export class GameRoomsService {
   /**
    * 새 방 생성. 호스트 1명을 participants에 함께 INSERT.
    * 코드 충돌 시 최대 5회 재시도.
+   *
+   * mode='club'은 클럽 가입자만 가능, mode='bet'은 누구나 가능.
    */
-  async createRoom(userId: string, nickname: string): Promise<string> {
-    if (!(await this.isClubUser(userId))) {
-      throw new UnauthorizedException('클럽 유저만 게임 방을 생성할 수 있습니다.');
+  async createRoom(
+    userId: string,
+    nickname: string,
+    opts?: {
+      mode?: GameRoomMode;
+      betMemo?: string | null;
+      maxPlayers?: number;
+    },
+  ): Promise<string> {
+    const mode = opts?.mode ?? GameRoomMode.CLUB;
+    if (mode === GameRoomMode.CLUB) {
+      if (!(await this.isClubUser(userId))) {
+        throw new UnauthorizedException(
+          '클럽 유저만 클럽 게임 방을 생성할 수 있습니다.',
+        );
+      }
     }
+
+    const maxPlayers = Math.min(
+      Math.max(opts?.maxPlayers ?? 6, 2),
+      6,
+    );
 
     for (let attempt = 0; attempt < 5; attempt++) {
       const id = this.generateRoomId();
@@ -83,6 +116,9 @@ export class GameRoomsService {
         id,
         host_id: userId,
         status: GameRoomStatus.WAITING,
+        mode,
+        bet_memo: mode === GameRoomMode.BET ? (opts?.betMemo ?? null) : null,
+        max_players: maxPlayers,
       });
       await this.roomRepository.save(room);
 
@@ -123,16 +159,133 @@ export class GameRoomsService {
       existing.disconnected_at = null;
       existing.nickname = nickname;
       await this.participantRepository.save(existing);
-    } else {
-      await this.participantRepository.save(
-        this.participantRepository.create({
-          room_id: roomId,
-          user_id: userId,
-          nickname,
-          score: 0,
-        }),
-      );
+      return;
     }
+
+    // 신규 참가 시 정원 체크
+    const currentCount = await this.participantRepository.count({
+      where: { room_id: roomId },
+    });
+    if (currentCount >= room.max_players) {
+      throw new Error('정원이 가득 찼습니다.');
+    }
+
+    await this.participantRepository.save(
+      this.participantRepository.create({
+        room_id: roomId,
+        user_id: userId,
+        nickname,
+        score: 0,
+      }),
+    );
+  }
+
+  /**
+   * 호스트만 가능. 게임 시작 전(status=waiting)까지만 핸디캡 수정 허용.
+   */
+  async updateHandicap(
+    roomId: string,
+    requesterId: string,
+    targetUserId: string,
+    handicap: number,
+  ): Promise<void> {
+    const room = await this.roomRepository.findOne({ where: { id: roomId } });
+    if (!room) throw new Error('존재하지 않는 방입니다.');
+    if (room.mode !== GameRoomMode.BET) {
+      throw new Error('내기 모드 방에서만 핸디캡을 설정할 수 있습니다.');
+    }
+    if (room.host_id !== requesterId) {
+      throw new Error('호스트만 핸디캡을 수정할 수 있습니다.');
+    }
+    if (room.status !== GameRoomStatus.WAITING) {
+      throw new Error('게임 시작 후엔 핸디캡을 변경할 수 없습니다.');
+    }
+    const participant = await this.participantRepository.findOne({
+      where: { room_id: roomId, user_id: targetUserId },
+    });
+    if (!participant) throw new Error('해당 참가자가 방에 없습니다.');
+
+    participant.handicap = Math.max(-100, Math.min(100, Math.trunc(handicap)));
+    await this.participantRepository.save(participant);
+  }
+
+  /**
+   * 참가자별 자동 추천 핸디캡.
+   * 룰: 참가자 중 최고 평균 점수 - 본인 평균 점수 (양수 = 더 받음).
+   *     기록 없는 사용자는 0으로 처리.
+   *     ±100 범위로 클램프.
+   */
+  async suggestHandicaps(
+    roomId: string,
+  ): Promise<Array<{ userId: string; suggestedHandicap: number; avg: number }>> {
+    const participants = await this.participantRepository.find({
+      where: { room_id: roomId },
+    });
+    if (participants.length === 0) return [];
+
+    const stats = await Promise.all(
+      participants.map(async (p) => {
+        const row = await this.gameRepository
+          .createQueryBuilder('g')
+          .select('AVG(g.total_score)', 'avg')
+          .where('g.user_id = :userId', { userId: p.user_id })
+          .getRawOne<{ avg: string | null }>();
+        return { userId: p.user_id, avg: Number(row?.avg ?? 0) };
+      }),
+    );
+    const maxAvg = Math.max(...stats.map((s) => s.avg));
+    return stats.map((s) => ({
+      userId: s.userId,
+      avg: s.avg,
+      suggestedHandicap: Math.max(
+        -100,
+        Math.min(100, Math.round(maxAvg - s.avg)),
+      ),
+    }));
+  }
+
+  /**
+   * 게임 종료 처리 + 핸디 적용 순위 계산.
+   * roomState 그대로 두고 status만 finished로 전환 (cron이 6시간 후 정리).
+   */
+  async finishAndRank(roomId: string): Promise<
+    Array<{
+      userId: string;
+      nickname: string;
+      score: number;
+      handicap: number;
+      adjustedScore: number;
+      rank: number;
+    }>
+  > {
+    const room = await this.roomRepository.findOne({ where: { id: roomId } });
+    if (!room) throw new Error('존재하지 않는 방입니다.');
+
+    await this.setRoomStatus(roomId, GameRoomStatus.FINISHED);
+
+    const participants = await this.participantRepository.find({
+      where: { room_id: roomId },
+      order: { joined_at: 'ASC' },
+    });
+    const items = participants
+      .map((p) => ({
+        userId: p.user_id,
+        nickname: p.nickname,
+        score: p.score,
+        handicap: room.mode === GameRoomMode.BET ? p.handicap : 0,
+        adjustedScore:
+          p.score + (room.mode === GameRoomMode.BET ? p.handicap : 0),
+      }))
+      .sort((a, b) => b.adjustedScore - a.adjustedScore);
+    let rank = 0;
+    let lastScore: number | null = null;
+    return items.map((item, idx) => {
+      if (item.adjustedScore !== lastScore) {
+        rank = idx + 1;
+        lastScore = item.adjustedScore;
+      }
+      return { ...item, rank };
+    });
   }
 
   /**
@@ -167,7 +320,7 @@ export class GameRoomsService {
       where: { room_id: roomId },
       order: { joined_at: 'ASC' },
     });
-    const map: Record<string, RoomParticipant> = {};
+    const map: Record<string, RoomParticipant & { handicap?: number }> = {};
     for (const p of participants) {
       map[p.user_id] = {
         nickname: p.nickname,
@@ -175,12 +328,16 @@ export class GameRoomsService {
         strikes: p.strikes ?? undefined,
         spares: p.spares ?? undefined,
         opens: p.opens ?? undefined,
+        handicap: room.mode === GameRoomMode.BET ? p.handicap : undefined,
       };
     }
     return {
       roomId: room.id,
       hostId: room.host_id,
       status: room.status,
+      mode: room.mode,
+      betMemo: room.bet_memo,
+      maxPlayers: room.max_players,
       participants: map,
       createdAt: room.created_at,
     };

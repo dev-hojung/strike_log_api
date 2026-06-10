@@ -108,6 +108,7 @@ export class GamesService {
       location?: string;
       frames?: Frame[];
       is_club_game?: boolean;
+      is_bet_game?: boolean;
       room_id?: string | null;
       club_rank?: number | null;
       started_at?: string | null;
@@ -129,6 +130,7 @@ export class GamesService {
       location: createData.location,
       frames: createData.frames,
       is_club_game: createData.is_club_game ?? false,
+      is_bet_game: createData.is_bet_game ?? false,
       room_id: createData.room_id ?? null,
       club_rank: createData.club_rank ?? null,
       started_at: createData.started_at ? new Date(createData.started_at) : null,

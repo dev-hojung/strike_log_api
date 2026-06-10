@@ -10,7 +10,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { GameRoomsService } from './game-rooms.service';
-import { GameRoomStatus } from './entities/game-room.entity';
+import { GameRoomMode, GameRoomStatus } from './entities/game-room.entity';
 import type { JwtPayload, AuthenticatedUser } from '../auth/jwt.strategy';
 
 /**
@@ -146,7 +146,13 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
 
   @SubscribeMessage('createRoom')
   async handleCreateRoom(
-    @MessageBody() data: { nickname?: string },
+    @MessageBody()
+    data: {
+      nickname?: string;
+      mode?: 'club' | 'bet';
+      betMemo?: string | null;
+      maxPlayers?: number;
+    },
     @ConnectedSocket() client: Socket,
   ) {
     const user = this.requireUser(client);
@@ -155,7 +161,17 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
       `[GameRooms] createRoom received from user=${user.id}: ${JSON.stringify(data ?? {})}`,
     );
     try {
-      const roomId = await this.gameRoomsService.createRoom(user.id, data?.nickname ?? '게스트');
+      const mode =
+        data?.mode === 'bet' ? GameRoomMode.BET : GameRoomMode.CLUB;
+      const roomId = await this.gameRoomsService.createRoom(
+        user.id,
+        data?.nickname ?? '게스트',
+        {
+          mode,
+          betMemo: data?.betMemo ?? null,
+          maxPlayers: data?.maxPlayers,
+        },
+      );
       console.log('[GameRooms] Room created:', roomId);
 
       // 클라이언트를 방에 등록 + disconnect 역추적용 매핑
@@ -275,5 +291,87 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
       roomId: data.roomId,
       participants: roomState.participants,
     });
+  }
+
+  /**
+   * 내기 모드 핸디캡 수정. 호스트만, 게임 시작 전까지만 가능.
+   */
+  @SubscribeMessage('updateHandicap')
+  async handleUpdateHandicap(
+    @MessageBody()
+    data: { roomId: string; targetUserId: string; handicap: number },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = this.requireUser(client);
+    if (!user) return;
+    try {
+      await this.gameRoomsService.updateHandicap(
+        data.roomId,
+        user.id,
+        data.targetUserId,
+        Number(data.handicap) || 0,
+      );
+      const roomState = await this.gameRoomsService.getRoomState(data.roomId);
+      this.emitToRoom(data.roomId, 'roomStateUpdated', roomState);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      client.emit('error', { message });
+    }
+  }
+
+  /**
+   * 자동 핸디캡 추천. 호스트가 "추천 적용" 버튼 누를 때 호출.
+   * 적용은 클라가 각 참가자에 대해 updateHandicap을 따로 호출.
+   */
+  @SubscribeMessage('suggestHandicaps')
+  async handleSuggestHandicaps(
+    @MessageBody() data: { roomId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = this.requireUser(client);
+    if (!user) return;
+    try {
+      const suggestions = await this.gameRoomsService.suggestHandicaps(
+        data.roomId,
+      );
+      client.emit('handicapSuggestions', { roomId: data.roomId, suggestions });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      client.emit('error', { message });
+    }
+  }
+
+  /**
+   * 게임 종료 + 핸디 적용 순위 emit.
+   * 호스트만 호출.
+   */
+  @SubscribeMessage('finishGame')
+  async handleFinishGame(
+    @MessageBody() data: { roomId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = this.requireUser(client);
+    if (!user) return;
+    const state = await this.gameRoomsService.getRoomState(data.roomId);
+    if (!state) {
+      client.emit('error', { message: '존재하지 않는 방입니다.' });
+      return;
+    }
+    if (state.hostId !== user.id) {
+      client.emit('error', { message: '호스트만 게임을 종료할 수 있습니다.' });
+      return;
+    }
+    try {
+      const rankings = await this.gameRoomsService.finishAndRank(data.roomId);
+      this.emitToRoom(data.roomId, 'gameEnded', {
+        roomId: data.roomId,
+        mode: state.mode,
+        betMemo: state.betMemo,
+        rankings,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      client.emit('error', { message });
+    }
   }
 }

@@ -61,6 +61,13 @@ export class Game {
   is_club_game: boolean;
 
   /**
+   * 내기 게임 여부. 핸디캡 적용 + 별도 결과 화면 사용.
+   * 개인 통계엔 포함되지만 클럽 통계엔 영향 없음(is_club_game이 false이므로).
+   */
+  @Column({ type: 'boolean', default: false })
+  is_bet_game: boolean;
+
+  /**
    * 클럽 게임 방 코드 (7자리). 개인 게임은 null.
    * 같은 room_id를 가진 레코드는 같은 클럽 경기의 참가자들이다.
    */

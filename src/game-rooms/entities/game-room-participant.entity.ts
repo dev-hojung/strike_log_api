@@ -26,6 +26,10 @@ export class GameRoomParticipant {
   @Column({ type: 'int', default: 0 })
   score: number;
 
+  /** 내기 모드 핸디캡 (실점수에 더해 핸디 적용 점수 계산). 클럽 모드에선 무시 */
+  @Column({ type: 'int', default: 0 })
+  handicap: number;
+
   @Column({ type: 'int', nullable: true })
   strikes: number | null;
 

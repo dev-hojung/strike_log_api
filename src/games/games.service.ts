@@ -145,6 +145,14 @@ export class GamesService {
       );
     }
 
+    // 퍼펙트 게임(300점) 달성 시 같은 클럽 멤버 전원에게 알림.
+    // 클럽 비가입자도 가능하지만 알림은 클럽원에게만 의미가 있으므로 클럽 가입자만 발송.
+    if (saved.total_score >= 300) {
+      this.notifyClubPerfectGame(user_id, saved.id).catch((err) =>
+        console.error('[Games] 퍼펙트 게임 알림 전송 실패:', err),
+      );
+    }
+
     // 개인 최고 점수 갱신 알림 (비동기, 게임 저장 흐름과 격리)
     this.notifyIfNewBestScore(user_id, saved.id, saved.total_score).catch(
       (err) => console.error('[Games] 베스트 갱신 알림 전송 실패:', err),
@@ -284,6 +292,40 @@ export class GamesService {
         targetId: String(gameId),
         actorId: creatorId,
         actorNickname: creatorNickname,
+      });
+    }
+  }
+
+  /**
+   * 300점 퍼펙트 게임 달성 시 같은 클럽 멤버 전원에게 알림.
+   * 본인은 제외. 다중 클럽 가입자는 클럽별로 한 번씩 발송 (UI에서 동일 게임 ID로 중복 표시 가능).
+   */
+  private async notifyClubPerfectGame(achieverId: string, gameId: number) {
+    const memberships = await this.groupMemberRepository.find({
+      where: { user_id: achieverId },
+      relations: ['user', 'group'],
+    });
+    if (memberships.length === 0) return;
+    const achieverNickname =
+      memberships[0].user?.nickname ?? '클럽 멤버';
+
+    for (const m of memberships) {
+      const peers = await this.groupMemberRepository.find({
+        where: { group_id: m.group_id },
+      });
+      const recipientIds = peers
+        .map((p) => p.user_id)
+        .filter((id) => id !== achieverId);
+      if (recipientIds.length === 0) continue;
+
+      const clubName = m.group?.name ?? '클럽';
+      await this.notificationsService.createBulk(recipientIds, {
+        type: NotificationType.CLUB_PERFECT_GAME,
+        title: '퍼펙트 게임 달성! 🎳',
+        body: `${achieverNickname}님이 ${clubName}에서 퍼펙트(300점)를 달성하셨습니다!`,
+        targetId: String(gameId),
+        actorId: achieverId,
+        actorNickname: achieverNickname,
       });
     }
   }
@@ -491,6 +533,7 @@ export class GamesService {
     let spares = 0;
     let opens = 0;
     let allCoverGames = 0;
+    let perfectGames = 0;
 
     for (const game of thisMonthGames) {
       if (!game.frames || game.frames.length === 0) continue;
@@ -543,8 +586,13 @@ export class GamesService {
         }
       }
 
+      // 퍼펙트 게임(300점)은 별도 카운트. 그 외 노 오픈 게임은 올커버.
       if (!gameHasOpen && game.frames.length >= 10) {
-        allCoverGames++;
+        if (game.total_score >= 300) {
+          perfectGames++;
+        } else {
+          allCoverGames++;
+        }
       }
     }
 
@@ -552,6 +600,7 @@ export class GamesService {
       strikes,
       spares,
       opens,
+      perfectGames,
       allCoverGames,
       gameCount: thisMonthGames.length,
     };

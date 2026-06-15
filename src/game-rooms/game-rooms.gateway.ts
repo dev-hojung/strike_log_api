@@ -256,14 +256,19 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
   ) {
     const user = this.requireUser(client);
     if (!user) return;
-    await this.gameRoomsService.leaveRoom(data.roomId, user.id);
+    try {
+      await this.gameRoomsService.leaveRoom(data.roomId, user.id);
 
-    this.roomClients.get(data.roomId)?.delete(client.id);
-    this.clientUserMap.delete(client.id);
+      this.roomClients.get(data.roomId)?.delete(client.id);
+      this.clientUserMap.delete(client.id);
 
-    const roomState = await this.gameRoomsService.getRoomState(data.roomId);
-    if (roomState) {
-      this.emitToRoom(data.roomId, 'roomStateUpdated', roomState);
+      const roomState = await this.gameRoomsService.getRoomState(data.roomId);
+      if (roomState) {
+        this.emitToRoom(data.roomId, 'roomStateUpdated', roomState);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      client.emit('error', { message });
     }
   }
 

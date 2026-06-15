@@ -134,10 +134,15 @@ export class NotificationsService {
   }
 
   /**
-   * 단건 읽음 처리
+   * 단건 읽음 처리 (소유자 검증 포함)
+   * @returns 영향 받은 행 수 (0이면 없거나 본인 소유 아님)
    */
-  async markAsRead(id: number): Promise<void> {
-    await this.notificationRepository.update(id, { isRead: true });
+  async markAsRead(id: number, userId: string): Promise<number> {
+    const result = await this.notificationRepository.update(
+      { id, userId },
+      { isRead: true },
+    );
+    return result.affected ?? 0;
   }
 
   /**

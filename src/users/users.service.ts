@@ -71,8 +71,15 @@ export class UsersService {
       nickname: nickname || email.split('@')[0], // 닉네임 미입력 시 이메일 아이디 사용
     });
 
-    const saved = await this.userRepository.save(user);
-    return this.issueToken(saved);
+    try {
+      const saved = await this.userRepository.save(user);
+      return this.issueToken(saved);
+    } catch (e: any) {
+      if (e?.code === 'ER_DUP_ENTRY' || e?.errno === 1062) {
+        throw new ConflictException('이미 가입된 이메일입니다.');
+      }
+      throw e;
+    }
   }
 
   /**
@@ -206,11 +213,16 @@ export class UsersService {
   }
 
   /**
-   * 내 프로필 정보 수정
+   * 내 프로필 정보 수정 (화이트리스트 필드만 허용)
    */
-  async updateProfile(id: string, updateData: Partial<User>) {
+  async updateProfile(
+    id: string,
+    updateData: { nickname?: string; profile_image_url?: string; phone?: string },
+  ) {
     const user = await this.getProfile(id);
-    Object.assign(user, updateData);
+    if (updateData.nickname !== undefined) user.nickname = updateData.nickname;
+    if (updateData.profile_image_url !== undefined) user.profile_image_url = updateData.profile_image_url;
+    if (updateData.phone !== undefined) user.phone = updateData.phone;
     return this.userRepository.save(user);
   }
 

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomInt } from 'crypto';
 import { Repository } from 'typeorm';
 import { Resend } from 'resend';
 import { EmailAuth } from './entities/email-auth.entity';
@@ -26,7 +27,7 @@ export class EmailService {
     purpose: 'signup' | 'reset' = 'signup',
   ): Promise<boolean> {
     try {
-      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const otpCode = randomInt(100000, 1000000).toString();
 
       // 기존에 인증받지 않은 코드가 있다면 삭제하여 최신 코드만 유지
       await this.emailAuthRepository.delete({ email, is_verified: false });
@@ -39,7 +40,9 @@ export class EmailService {
       await this.emailAuthRepository.save(emailAuth);
 
       // 개발/테스트 편의를 위해 발급된 OTP를 콘솔에 출력합니다.
-      console.log(`[Email Auth OTP/${purpose}] To: ${email}, Code: ${otpCode}`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[Email Auth OTP/${purpose}] To: ${email}, Code: ${otpCode}`);
+      }
 
       const fromAddress =
         this.configService.get<string>('RESEND_FROM_ADDRESS') ??
@@ -68,9 +71,11 @@ export class EmailService {
       if (error) {
         // Resend 도메인 미인증으로 인한 에러 발생 시,
         // 콘솔에 안내를 띄우고 시스템은 정상(true)으로 진행되게 하여 테스트를 돕습니다.
-        console.warn(
-          `[Email Warning] Resend 이메일 발송 제한. OTP 코드는 콘솔에서 확인하세요. (${error.message})`,
-        );
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn(
+            `[Email Warning] Resend 이메일 발송 제한. OTP 코드는 콘솔에서 확인하세요. (${error.message})`,
+          );
+        }
         return true;
       }
 
@@ -120,33 +125,30 @@ export class EmailService {
       return true;
     }
 
-    console.warn(
-      `[Email Auth Failed] (${email}) 인증번호가 일치하지 않습니다. (입력: ${code}, 예상: ${authRecord.code})`,
-    );
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn(
+        `[Email Auth Failed] (${email}) 인증번호가 일치하지 않습니다.`,
+      );
+    }
     return false;
   }
 
   /**
    * 비밀번호 재설정 등 1회성 검증 시 사용.
-   * 코드가 일치하고 5분 이내라면 즉시 행을 삭제(소비)하고 true.
+   * 단일 DELETE 쿼리로 TOCTOU race condition 방지.
+   * 코드가 일치하고 5분 이내라면 행을 즉시 삭제(소비)하고 true.
    * 동일 OTP로 두 번째 시도 시 false (재사용 방지).
    */
   async consumeOtp(email: string, code: string): Promise<boolean> {
-    const authRecord = await this.emailAuthRepository.findOne({
-      where: { email },
-      order: { created_at: 'DESC' },
-    });
-    if (!authRecord) return false;
-
-    const diffMins =
-      (Date.now() - new Date(authRecord.created_at).getTime()) / (1000 * 60);
-    if (diffMins > 5) {
-      await this.emailAuthRepository.delete(authRecord.id);
-      return false;
-    }
-    if (authRecord.code !== code) return false;
-
-    await this.emailAuthRepository.delete(authRecord.id);
-    return true;
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const result = await this.emailAuthRepository
+      .createQueryBuilder()
+      .delete()
+      .from(EmailAuth)
+      .where('email = :email', { email })
+      .andWhere('code = :code', { code })
+      .andWhere('created_at >= :since', { since: fiveMinAgo })
+      .execute();
+    return (result.affected ?? 0) > 0;
   }
 }

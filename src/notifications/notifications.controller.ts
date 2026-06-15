@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Logger, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Logger, NotFoundException, Param, Post } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -32,15 +32,19 @@ export class NotificationsController {
   }
 
   /**
-   * 본인 알림 단건 읽음 처리
-   * (서비스에 소유자 검증 메서드가 없으므로, ID 기반으로 본인 외 호출은 막을 수 없음 →
-   *  현재는 인증된 유저만 호출 가능. 추후 서비스 레벨에서 owner 체크 추가 권장.)
+   * 본인 알림 단건 읽음 처리 (소유자 검증 포함 — 타인 알림 읽음 처리 불가)
    */
   @ApiOperation({ summary: '알림 단건 읽음 처리' })
   @ApiParam({ name: 'id', description: '알림 ID', example: '7' })
   @Post(':id/read')
-  async markAsRead(@Param('id') id: string) {
-    await this.notificationsService.markAsRead(+id);
+  async markAsRead(
+    @Param('id') id: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    const affected = await this.notificationsService.markAsRead(+id, userId);
+    if (!affected) {
+      throw new NotFoundException('알림을 찾을 수 없습니다.');
+    }
     return { ok: true };
   }
 

@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import {
   Body,
   Controller,
@@ -55,7 +56,12 @@ export class SystemNoticesController {
       this.logger.warn('ADMIN_API_KEY env not configured — admin POST blocked');
       throw new ForbiddenException('admin endpoint disabled');
     }
-    if (!adminToken || adminToken !== expected) {
+    const expectedBuf = Buffer.from(expected);
+    const tokenBuf = Buffer.from(adminToken ?? '');
+    const equal =
+      expectedBuf.length === tokenBuf.length &&
+      crypto.timingSafeEqual(expectedBuf, tokenBuf);
+    if (!adminToken || !equal) {
       throw new ForbiddenException('invalid admin token');
     }
     if (!dto?.title || !dto?.body) {

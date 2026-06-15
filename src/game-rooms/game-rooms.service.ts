@@ -137,47 +137,53 @@ export class GameRoomsService {
 
   /**
    * 방 참가. 같은 사용자가 다시 들어오면 disconnected_at만 풀어준다(grace 재진입).
+   * 신규 참가 시 정원 초과를 막기 위해 pessimistic write lock + transaction 사용.
    */
   async joinRoom(
     roomId: string,
     userId: string,
     nickname: string,
   ): Promise<void> {
-    const room = await this.roomRepository.findOne({ where: { id: roomId } });
-    if (!room) {
-      throw new Error('존재하지 않는 방입니다.');
-    }
-    if (room.status === GameRoomStatus.FINISHED) {
-      throw new Error('이미 종료된 방입니다.');
-    }
+    await this.roomRepository.manager.transaction(async (em) => {
+      const room = await em.findOne(GameRoom, {
+        where: { id: roomId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!room) {
+        throw new Error('존재하지 않는 방입니다.');
+      }
+      if (room.status === GameRoomStatus.FINISHED) {
+        throw new Error('이미 종료된 방입니다.');
+      }
 
-    const existing = await this.participantRepository.findOne({
-      where: { room_id: roomId, user_id: userId },
+      const existing = await em.findOne(GameRoomParticipant, {
+        where: { room_id: roomId, user_id: userId },
+      });
+      if (existing) {
+        // 일시 disconnect 상태였다면 grace 해제 + 닉네임 갱신
+        existing.disconnected_at = null;
+        existing.nickname = nickname;
+        await em.save(existing);
+        return;
+      }
+
+      // 신규 참가 시 정원 체크 (lock 보유 중 count)
+      const currentCount = await em.count(GameRoomParticipant, {
+        where: { room_id: roomId },
+      });
+      if (currentCount >= room.max_players) {
+        throw new Error('정원이 가득 찼습니다.');
+      }
+
+      await em.save(
+        em.create(GameRoomParticipant, {
+          room_id: roomId,
+          user_id: userId,
+          nickname,
+          score: 0,
+        }),
+      );
     });
-    if (existing) {
-      // 일시 disconnect 상태였다면 grace 해제 + 닉네임 갱신
-      existing.disconnected_at = null;
-      existing.nickname = nickname;
-      await this.participantRepository.save(existing);
-      return;
-    }
-
-    // 신규 참가 시 정원 체크
-    const currentCount = await this.participantRepository.count({
-      where: { room_id: roomId },
-    });
-    if (currentCount >= room.max_players) {
-      throw new Error('정원이 가득 찼습니다.');
-    }
-
-    await this.participantRepository.save(
-      this.participantRepository.create({
-        room_id: roomId,
-        user_id: userId,
-        nickname,
-        score: 0,
-      }),
-    );
   }
 
   /**
@@ -346,28 +352,31 @@ export class GameRoomsService {
   /**
    * 사용자가 명시적으로 방에서 나감.
    * 호스트면 가장 먼저 들어온 다른 참가자에게 host 이전. 마지막 참가자면 방 삭제.
+   * DELETE → SELECT remaining → host UPDATE 를 동일 트랜잭션 안에서 수행.
    */
   async leaveRoom(roomId: string, userId: string): Promise<void> {
-    await this.participantRepository.delete({
-      room_id: roomId,
-      user_id: userId,
+    await this.roomRepository.manager.transaction(async (em) => {
+      await em.delete(GameRoomParticipant, {
+        room_id: roomId,
+        user_id: userId,
+      });
+      const remaining = await em.find(GameRoomParticipant, {
+        where: { room_id: roomId },
+        order: { joined_at: 'ASC' },
+      });
+      if (remaining.length === 0) {
+        await em.delete(GameRoom, { id: roomId });
+        return;
+      }
+      const room = await em.findOne(GameRoom, { where: { id: roomId } });
+      if (room && room.host_id === userId) {
+        room.host_id = remaining[0].user_id;
+        await em.save(room);
+        this.logger.log(
+          `host succession in room=${roomId}: → ${remaining[0].user_id}`,
+        );
+      }
     });
-    const remaining = await this.participantRepository.find({
-      where: { room_id: roomId },
-      order: { joined_at: 'ASC' },
-    });
-    if (remaining.length === 0) {
-      await this.roomRepository.delete({ id: roomId });
-      return;
-    }
-    const room = await this.roomRepository.findOne({ where: { id: roomId } });
-    if (room && room.host_id === userId) {
-      room.host_id = remaining[0].user_id;
-      await this.roomRepository.save(room);
-      this.logger.log(
-        `host succession in room=${roomId}: → ${remaining[0].user_id}`,
-      );
-    }
   }
 
   /**

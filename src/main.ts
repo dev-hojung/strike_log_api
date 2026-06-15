@@ -24,6 +24,9 @@ async function bootstrap() {
   // Flutter 앱 또는 외부 클라이언트와의 연동을 위해 CORS를 활성화합니다.
   app.enableCors();
 
+  // 글로벌 ValidationPipe는 class-validator 의존 추가 + 모든 DTO 데코레이터 정리 후 도입 예정.
+  // 현재는 updateProfile 화이트리스트 등 서비스 레이어에서 개별 방어함.
+
   // 프로필 이미지를 base64 Data URI로 전송하므로 기본 100KB 한도를 확장.
   // 클라 측에서도 350KB 한도(maxDataUriLength)로 차단하지만, 응답 조회 본문이 큰 경우를 대비해 여유.
   app.use(json({ limit: '10mb' }));

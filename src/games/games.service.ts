@@ -397,13 +397,65 @@ export class GamesService {
       }
     });
 
-    const recentTrend = allGames
-      .slice(0, 10)
+    // 최근 10경기만 frames join (성능 위해 전체 allGames에 join하지 않음)
+    const recent10 = await this.gameRepository.find({
+      where: { user_id },
+      order: { play_date: 'DESC', created_at: 'DESC' },
+      take: 10,
+      relations: ['frames'],
+    });
+
+    const recentTrend = recent10
+      .slice()
       .reverse()
-      .map((game) => ({
-        score: game.total_score,
-        date: game.play_date,
-      }));
+      .map((game) => {
+        const frames = game.frames ?? [];
+        let strikes = 0, spares = 0, opens = 0;
+        for (const frame of frames) {
+          if (frame.frame_number <= 9) {
+            if (frame.first_roll === 10) {
+              strikes++;
+            } else if (
+              frame.first_roll != null &&
+              frame.second_roll != null &&
+              frame.first_roll + frame.second_roll === 10
+            ) {
+              spares++;
+            } else {
+              opens++;
+            }
+          } else {
+            // 10프레임
+            if (frame.first_roll === 10) {
+              strikes++;
+              if (frame.second_roll === 10) {
+                strikes++;
+                if (frame.third_roll === 10) {
+                  strikes++;
+                }
+              } else if (frame.second_roll != null && frame.third_roll != null) {
+                if (frame.second_roll + frame.third_roll === 10) {
+                  spares++;
+                } else {
+                  opens++;
+                }
+              }
+            } else if (
+              frame.first_roll != null &&
+              frame.second_roll != null &&
+              frame.first_roll + frame.second_roll === 10
+            ) {
+              spares++;
+              if (frame.third_roll === 10) {
+                strikes++;
+              }
+            } else {
+              opens++;
+            }
+          }
+        }
+        return { score: game.total_score, date: game.play_date, strikes, spares, opens };
+      });
 
     const now = new Date();
     const currentMonth = now.getMonth();

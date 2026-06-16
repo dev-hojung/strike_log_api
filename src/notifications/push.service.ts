@@ -108,10 +108,9 @@ export class PushService implements OnModuleInit {
             priority: 'high',
             defaultSound: true,
             defaultVibrateTimings: true,
-            // Android 자동 그룹화는 4개 이상 누적되면 후속 알림에 SILENT을 붙인다.
-            // 동일 tag로 통일해 신규 알림이 기존 알림을 대체하도록 강제.
-            // (앱 내부 알림 페이지엔 DB 기반으로 모든 이력이 남아있음)
-            tag: 'strike_log_default_v2',
+            // tag를 지정하면 Android FCM이 같은 tag 알림을 새 알림으로 대체한다.
+            // 모든 알림이 트레이에 누적되어야 하므로 tag를 명시하지 않는다.
+            // 자동 그룹화로 인한 SILENT 강제는 클라 측 groupKey/groupAlertBehavior로 대응.
           },
         },
         apns: {
@@ -200,7 +199,7 @@ export class PushService implements OnModuleInit {
               priority: 'high',
               defaultSound: true,
               defaultVibrateTimings: true,
-              tag: 'strike_log_default_v2',
+              // tag 미지정: 알림이 트레이에 누적되도록 한다 (sendToUsers와 동일 정책).
             },
           },
           apns: { payload: { aps: { sound: 'default' } } },

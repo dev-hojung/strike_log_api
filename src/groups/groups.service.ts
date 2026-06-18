@@ -405,6 +405,8 @@ export class GroupsService implements OnModuleInit {
         user_id: gm.user.id,
         nickname: gm.user.nickname,
         profile_image_url: gm.user.profile_image_url,
+        // 클라 측에서 ADMIN 뱃지를 숨기기 위한 플래그(플랫폼 어드민과 클럽 ADMIN 표시 분리).
+        is_platform_admin: isPlatformAdmin(gm.user.id),
       }));
 
       // 클럽장(ADMIN) 찾기
@@ -768,6 +770,8 @@ export class GroupsService implements OnModuleInit {
           user_id: member.user_id,
           role: member.role,
           joined_at: member.joined_at,
+          // 플랫폼 어드민 여부 — 클라가 클럽 ADMIN 뱃지를 숨기기 위해 사용.
+          is_platform_admin: isPlatformAdmin(member.user_id),
           user: {
             id: member.user.id,
             nickname: member.user.nickname,

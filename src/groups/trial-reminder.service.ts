@@ -6,6 +6,7 @@ import { Group, SubscriptionStatus } from './entities/group.entity';
 import { GroupMember, GroupRole } from './entities/group-member.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
+import { DiscordNotifierService } from '../common/discord-notifier.service';
 
 /**
  * 클럽 체험판 만료 알림 스케줄러.
@@ -23,11 +24,23 @@ export class TrialReminderService {
     @InjectRepository(GroupMember)
     private readonly groupMemberRepository: Repository<GroupMember>,
     private readonly notificationsService: NotificationsService,
+    private readonly discord: DiscordNotifierService,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_9AM)
   async handleDailyReminders() {
-    await this.run();
+    try {
+      await this.run();
+    } catch (err) {
+      const error = err as Error;
+      this.logger.error(`[handleDailyReminders] cron failed: ${error.message}`, error.stack);
+      void this.discord.notifyError({
+        source: 'cron',
+        title: 'Cron failed: handleDailyReminders',
+        message: error.message,
+        stack: error.stack,
+      });
+    }
   }
 
   /**

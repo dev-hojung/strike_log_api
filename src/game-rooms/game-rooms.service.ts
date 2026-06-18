@@ -2,6 +2,7 @@ import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
+import { DiscordNotifierService } from '../common/discord-notifier.service';
 
 import { GroupMember } from '../groups/entities/group-member.entity';
 import { Game } from '../games/entities/game.entity';
@@ -69,6 +70,7 @@ export class GameRoomsService {
     private readonly participantRepository: Repository<GameRoomParticipant>,
     @InjectRepository(Game)
     private readonly gameRepository: Repository<Game>,
+    private readonly discord: DiscordNotifierService,
   ) {}
 
   async isClubUser(userId: string): Promise<boolean> {
@@ -420,33 +422,44 @@ export class GameRoomsService {
 
   @Cron('*/30 * * * * *')
   async cleanupStaleEntries(): Promise<void> {
-    const waitingCutoff = new Date(
-      Date.now() - GameRoomsService.STALE_WAITING_ROOM_MS,
-    );
-    await this.roomRepository.delete({
-      status: GameRoomStatus.WAITING,
-      updated_at: LessThan(waitingCutoff) as unknown as Date,
-    });
+    try {
+      const waitingCutoff = new Date(
+        Date.now() - GameRoomsService.STALE_WAITING_ROOM_MS,
+      );
+      await this.roomRepository.delete({
+        status: GameRoomStatus.WAITING,
+        updated_at: LessThan(waitingCutoff) as unknown as Date,
+      });
 
-    const finishedCutoff = new Date(
-      Date.now() - GameRoomsService.STALE_FINISHED_ROOM_MS,
-    );
-    await this.roomRepository
-      .createQueryBuilder()
-      .delete()
-      .where('status != :waiting', { waiting: GameRoomStatus.WAITING })
-      .andWhere('updated_at < :cutoff', { cutoff: finishedCutoff })
-      .execute();
+      const finishedCutoff = new Date(
+        Date.now() - GameRoomsService.STALE_FINISHED_ROOM_MS,
+      );
+      await this.roomRepository
+        .createQueryBuilder()
+        .delete()
+        .where('status != :waiting', { waiting: GameRoomStatus.WAITING })
+        .andWhere('updated_at < :cutoff', { cutoff: finishedCutoff })
+        .execute();
 
-    // 빈 방(참가자 0명)이 어쩌다 남아 있으면 정리
-    const orphanRooms = await this.roomRepository
-      .createQueryBuilder('r')
-      .leftJoin(GameRoomParticipant, 'p', 'p.room_id = r.id')
-      .where('p.user_id IS NULL')
-      .select('r.id', 'id')
-      .getRawMany<{ id: string }>();
-    if (orphanRooms.length > 0) {
-      await this.roomRepository.delete(orphanRooms.map((r) => r.id));
+      // 빈 방(참가자 0명)이 어쩌다 남아 있으면 정리
+      const orphanRooms = await this.roomRepository
+        .createQueryBuilder('r')
+        .leftJoin(GameRoomParticipant, 'p', 'p.room_id = r.id')
+        .where('p.user_id IS NULL')
+        .select('r.id', 'id')
+        .getRawMany<{ id: string }>();
+      if (orphanRooms.length > 0) {
+        await this.roomRepository.delete(orphanRooms.map((r) => r.id));
+      }
+    } catch (err) {
+      const error = err as Error;
+      this.logger.error(`[cleanupStaleEntries] cron failed: ${error.message}`, error.stack);
+      void this.discord.notifyError({
+        source: 'cron',
+        title: 'Cron failed: cleanupStaleEntries',
+        message: error.message,
+        stack: error.stack,
+      });
     }
   }
 

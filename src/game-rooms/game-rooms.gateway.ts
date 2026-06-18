@@ -13,6 +13,7 @@ import { Server, Socket } from 'socket.io';
 import { GameRoomsService } from './game-rooms.service';
 import { GameRoomMode, GameRoomStatus } from './entities/game-room.entity';
 import type { JwtPayload, AuthenticatedUser } from '../auth/jwt.strategy';
+import { DiscordNotifierService } from '../common/discord-notifier.service';
 
 /**
  * Socket의 `data`에 부착되는 인증 사용자 정보.
@@ -47,6 +48,7 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
   constructor(
     private readonly gameRoomsService: GameRoomsService,
     private readonly jwtService: JwtService,
+    private readonly discord: DiscordNotifierService,
   ) {}
 
   /**
@@ -154,15 +156,26 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
    */
   @Cron('*/30 * * * * *')
   async cleanupStalePeers(): Promise<void> {
-    const stale = await this.gameRoomsService.getStalePeers();
-    for (const p of stale) {
-      try {
-        await this.gameRoomsService.leaveRoom(p.room_id, p.user_id);
-        const state = await this.gameRoomsService.getRoomState(p.room_id);
-        if (state) this.emitToRoom(p.room_id, 'roomStateUpdated', state);
-      } catch (e) {
-        console.log(`[GameRooms] cleanup leaveRoom failed: ${(e as Error).message}`);
+    try {
+      const stale = await this.gameRoomsService.getStalePeers();
+      for (const p of stale) {
+        try {
+          await this.gameRoomsService.leaveRoom(p.room_id, p.user_id);
+          const state = await this.gameRoomsService.getRoomState(p.room_id);
+          if (state) this.emitToRoom(p.room_id, 'roomStateUpdated', state);
+        } catch (e) {
+          console.log(`[GameRooms] cleanup leaveRoom failed: ${(e as Error).message}`);
+        }
       }
+    } catch (err) {
+      const error = err as Error;
+      console.error(`[cleanupStalePeers] cron failed: ${error.message}`, error.stack);
+      void this.discord.notifyError({
+        source: 'cron',
+        title: 'Cron failed: cleanupStalePeers',
+        message: error.message,
+        stack: error.stack,
+      });
     }
   }
 

@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -16,6 +16,8 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { BadgesModule } from './badges/badges.module';
 import { ChallengesModule } from './challenges/challenges.module';
 import { SystemNoticesModule } from './system-notices/system-notices.module';
+import { DiscordNotifierModule } from './common/discord-notifier.module';
+import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
 @Module({
   imports: [
@@ -56,6 +58,7 @@ import { SystemNoticesModule } from './system-notices/system-notices.module';
         };
       },
     }),
+    DiscordNotifierModule,
     AuthModule,
     UsersModule,
     GroupsModule,
@@ -72,6 +75,8 @@ import { SystemNoticesModule } from './system-notices/system-notices.module';
     AppService,
     // 전역 JWT 인증 가드. @Public()이 붙은 라우트만 무인증 허용.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    // 전역 ExceptionFilter: 5xx만 Discord 알림
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],
 })
 export class AppModule {}

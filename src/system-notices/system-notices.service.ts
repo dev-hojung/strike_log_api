@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { PushService } from '../notifications/push.service';
+import { DiscordNotifierService } from '../common/discord-notifier.service';
 import { CreateSystemNoticeDto } from './dto/create-system-notice.dto';
 import {
   SystemNotice,
@@ -18,6 +19,7 @@ export class SystemNoticesService {
     @InjectRepository(SystemNotice)
     private readonly noticeRepository: Repository<SystemNotice>,
     private readonly pushService: PushService,
+    private readonly discord: DiscordNotifierService,
   ) {}
 
   /**
@@ -84,41 +86,52 @@ export class SystemNoticesService {
    */
   @Cron('0 0 * * *', { timeZone: 'UTC' })
   async runDailyBroadcasts(): Promise<void> {
-    const now = new Date();
-    const todayKst = this.ymdKst(now);
-    const due = await this.noticeRepository
-      .createQueryBuilder('n')
-      .where('n.repeat_daily = TRUE')
-      .andWhere('(n.starts_at IS NULL OR n.starts_at <= :now)', { now })
-      .andWhere('(n.ends_at IS NULL OR n.ends_at >= :now)', { now })
-      .getMany();
+    try {
+      const now = new Date();
+      const todayKst = this.ymdKst(now);
+      const due = await this.noticeRepository
+        .createQueryBuilder('n')
+        .where('n.repeat_daily = TRUE')
+        .andWhere('(n.starts_at IS NULL OR n.starts_at <= :now)', { now })
+        .andWhere('(n.ends_at IS NULL OR n.ends_at >= :now)', { now })
+        .getMany();
 
-    if (due.length === 0) {
-      this.logger.log('runDailyBroadcasts: no repeat_daily notices due');
-      return;
-    }
-
-    for (const notice of due) {
-      const lastYmd = notice.last_pushed_at
-        ? this.ymdKst(notice.last_pushed_at)
-        : null;
-      if (lastYmd === todayKst) {
-        this.logger.log(
-          `runDailyBroadcasts skip id=${notice.id} — already pushed today (KST ${todayKst})`,
-        );
-        continue;
+      if (due.length === 0) {
+        this.logger.log('runDailyBroadcasts: no repeat_daily notices due');
+        return;
       }
-      await this.pushService.sendToAllDevices({
-        title: notice.title,
-        body: notice.body,
-        data: {
-          type: 'system_notice',
-          notice_id: String(notice.id),
-        },
+
+      for (const notice of due) {
+        const lastYmd = notice.last_pushed_at
+          ? this.ymdKst(notice.last_pushed_at)
+          : null;
+        if (lastYmd === todayKst) {
+          this.logger.log(
+            `runDailyBroadcasts skip id=${notice.id} — already pushed today (KST ${todayKst})`,
+          );
+          continue;
+        }
+        await this.pushService.sendToAllDevices({
+          title: notice.title,
+          body: notice.body,
+          data: {
+            type: 'system_notice',
+            notice_id: String(notice.id),
+          },
+        });
+        notice.last_pushed_at = new Date();
+        await this.noticeRepository.save(notice);
+        this.logger.log(`runDailyBroadcasts pushed id=${notice.id}`);
+      }
+    } catch (err) {
+      const error = err as Error;
+      this.logger.error(`[runDailyBroadcasts] cron failed: ${error.message}`, error.stack);
+      void this.discord.notifyError({
+        source: 'cron',
+        title: 'Cron failed: runDailyBroadcasts',
+        message: error.message,
+        stack: error.stack,
       });
-      notice.last_pushed_at = new Date();
-      await this.noticeRepository.save(notice);
-      this.logger.log(`runDailyBroadcasts pushed id=${notice.id}`);
     }
   }
 

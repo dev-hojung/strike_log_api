@@ -16,6 +16,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { BadgesModule } from './badges/badges.module';
 import { ChallengesModule } from './challenges/challenges.module';
 import { SystemNoticesModule } from './system-notices/system-notices.module';
+import { InquiriesModule } from './inquiries/inquiries.module';
 import { DiscordNotifierModule } from './common/discord-notifier.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
@@ -69,6 +70,7 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
     BadgesModule,
     ChallengesModule,
     SystemNoticesModule,
+    InquiriesModule,
   ],
   controllers: [AppController],
   providers: [

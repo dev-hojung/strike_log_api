@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 
 export interface DiscordNotifyOptions {
   source: 'http' | 'cron' | string;
@@ -11,7 +11,7 @@ export interface DiscordNotifyOptions {
 }
 
 @Injectable()
-export class DiscordNotifierService {
+export class DiscordNotifierService implements OnModuleInit {
   private readonly logger = new Logger(DiscordNotifierService.name);
   private readonly enabled: boolean;
   private readonly webhookUrl: string;
@@ -117,6 +117,47 @@ export class DiscordNotifierService {
     } catch (err) {
       this.logger.warn(
         `Discord webhook 전송 실패 (무시): ${(err as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * 서버 부팅 시 헬스 체크용 알림 1회 발송.
+   * DISCORD_NOTIFY_STARTUP=on 일 때만 보낸다 (매 재배포마다 보내면 노이즈가 커서 기본 OFF).
+   * 처음 webhook 연동 확인 시 ON으로 켜고, 확인 후 끄면 된다.
+   */
+  onModuleInit(): void {
+    if (!this.enabled) return;
+    if (process.env.DISCORD_NOTIFY_STARTUP !== 'on') return;
+    const env = process.env.NODE_ENV ?? 'development';
+    void this.sendStartupNotice(env);
+  }
+
+  private async sendStartupNotice(env: string): Promise<void> {
+    const payload = {
+      embeds: [
+        {
+          title: `🟢 Strike Log API 시작됨`,
+          description: `환경: \`${env}\`\nDiscord webhook 연동 정상.`,
+          color: 0x4caf50,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+    try {
+      const res = await fetch(this.webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        this.logger.warn(
+          `startup 알림 응답 오류: ${res.status} ${res.statusText}`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(
+        `startup 알림 전송 실패 (무시): ${(err as Error).message}`,
       );
     }
   }

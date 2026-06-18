@@ -33,7 +33,7 @@ interface ChannelConfig {
  * Discord 채널 알림 서비스.
  *
  * 두 종류의 채널을 분리해서 운용한다:
- * - 에러: DISCORD_WEBHOOK_URL (+ 선택 DISCORD_ALERT_MENTION)
+ * - 에러: DISCORD_ERROR_WEBHOOK_URL (+ 선택 DISCORD_ALERT_MENTION)
  * - 문의: DISCORD_INQUIRY_WEBHOOK_URL (+ 선택 DISCORD_INQUIRY_MENTION)
  *
  * URL 미설정 시 해당 채널만 disabled. 다른 채널엔 영향 없음.
@@ -57,7 +57,7 @@ export class DiscordNotifierService implements OnModuleInit {
 
   constructor() {
     this.errorChannel = {
-      url: (process.env.DISCORD_WEBHOOK_URL ?? '').trim(),
+      url: (process.env.DISCORD_ERROR_WEBHOOK_URL ?? '').trim(),
       mention: (process.env.DISCORD_ALERT_MENTION ?? '').trim(),
     };
     this.inquiryChannel = {
@@ -67,7 +67,7 @@ export class DiscordNotifierService implements OnModuleInit {
 
     if (!this.errorChannel.url) {
       this.logger.warn(
-        'DISCORD_WEBHOOK_URL 미설정 — 에러 알림 비활성화 (로컬 dev 모드)',
+        'DISCORD_ERROR_WEBHOOK_URL 미설정 — 에러 알림 비활성화 (로컬 dev 모드)',
       );
     }
     if (!this.inquiryChannel.url) {

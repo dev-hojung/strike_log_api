@@ -15,6 +15,7 @@ export class DiscordNotifierService implements OnModuleInit {
   private readonly logger = new Logger(DiscordNotifierService.name);
   private readonly enabled: boolean;
   private readonly webhookUrl: string;
+  private readonly mention: string;
   private readonly lastSent = new Map<string, number>();
 
   private static readonly DEDUP_WINDOW_MS = 60_000;
@@ -37,6 +38,10 @@ export class DiscordNotifierService implements OnModuleInit {
       this.enabled = true;
       this.webhookUrl = url;
     }
+    // 에러 알림 시 함께 표시할 멘션 문자열.
+    // 예: '<@&ROLE_ID>' (역할), '<@USER_ID>' (특정 유저), '@here', '@everyone'.
+    // 미설정이면 멘션 없이 임베드만 발송.
+    this.mention = (process.env.DISCORD_ALERT_MENTION ?? '').trim();
   }
 
   /**
@@ -91,7 +96,7 @@ export class DiscordNotifierService implements OnModuleInit {
         inline: false,
       });
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       embeds: [
         {
           title,
@@ -102,6 +107,12 @@ export class DiscordNotifierService implements OnModuleInit {
         },
       ],
     };
+    // 에러 알림에는 환경변수로 지정한 멘션을 content로 같이 보낸다.
+    // 임베드 내부 텍스트는 멘션 알림이 트리거되지 않아 content 필드를 써야 함.
+    if (this.mention) {
+      payload.content = this.mention;
+      payload.allowed_mentions = { parse: ['users', 'roles', 'everyone'] };
+    }
 
     try {
       const res = await fetch(this.webhookUrl, {

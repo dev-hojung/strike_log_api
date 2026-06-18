@@ -407,24 +407,19 @@ export class GameRoomsService {
    *   2) waiting 상태로 1시간 이상 방치된 방 삭제
    *   3) playing/finished 상태로 6시간 이상 지난 방 삭제
    */
-  @Cron('*/30 * * * * *')
-  async cleanupStaleEntries(): Promise<void> {
+  /**
+   * grace period가 지난 disconnected 참가자 목록을 반환한다.
+   * gateway의 cron에서 leaveRoom + broadcast를 처리한다.
+   */
+  async getStalePeers(): Promise<GameRoomParticipant[]> {
     const graceCutoff = new Date(Date.now() - GameRoomsService.DISCONNECT_GRACE_MS);
-    const stalePeers = await this.participantRepository.find({
+    return this.participantRepository.find({
       where: { disconnected_at: LessThan(graceCutoff) as unknown as Date },
     });
-    for (const p of stalePeers) {
-      try {
-        await this.leaveRoom(p.room_id, p.user_id);
-      } catch (e) {
-        this.logger.warn(
-          `cleanup leaveRoom failed room=${p.room_id} user=${p.user_id}: ${
-            (e as Error).message
-          }`,
-        );
-      }
-    }
+  }
 
+  @Cron('*/30 * * * * *')
+  async cleanupStaleEntries(): Promise<void> {
     const waitingCutoff = new Date(
       Date.now() - GameRoomsService.STALE_WAITING_ROOM_MS,
     );

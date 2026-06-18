@@ -8,6 +8,7 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { JwtService } from '@nestjs/jwt';
+import { Cron } from '@nestjs/schedule';
 import { Server, Socket } from 'socket.io';
 import { GameRoomsService } from './game-rooms.service';
 import { GameRoomMode, GameRoomStatus } from './entities/game-room.entity';
@@ -102,6 +103,9 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
         console.log(
           `[GameRooms] Marked disconnected user=${userId} room=${roomId} (grace period 진입)`,
         );
+        // 남은 참가자에게 끊김 사실을 알리기 위해 현재 상태 broadcast
+        const state = await this.gameRoomsService.getRoomState(roomId);
+        if (state) this.emitToRoom(roomId, 'roomStateUpdated', state);
       } catch (e) {
         console.log(
           `[GameRooms] markDisconnected failed: ${(e as Error).message}`,
@@ -141,6 +145,24 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
     console.log(`[GameRooms] Emitting '${event}' to ${clients.size} clients in room ${roomId}`);
     for (const [, socket] of clients) {
       socket.emit(event, data);
+    }
+  }
+
+  /**
+   * 매 30초마다 grace period가 지난 disconnected 참가자를 leaveRoom 처리하고
+   * 남은 참가자에게 roomStateUpdated를 broadcast한다.
+   */
+  @Cron('*/30 * * * * *')
+  async cleanupStalePeers(): Promise<void> {
+    const stale = await this.gameRoomsService.getStalePeers();
+    for (const p of stale) {
+      try {
+        await this.gameRoomsService.leaveRoom(p.room_id, p.user_id);
+        const state = await this.gameRoomsService.getRoomState(p.room_id);
+        if (state) this.emitToRoom(p.room_id, 'roomStateUpdated', state);
+      } catch (e) {
+        console.log(`[GameRooms] cleanup leaveRoom failed: ${(e as Error).message}`);
+      }
     }
   }
 

@@ -24,6 +24,17 @@ export class AppController {
     return PRIVACY_POLICY_HTML;
   }
 
+  /**
+   * AdMob app-ads.txt (광고 인벤토리 인증). 도메인 루트로 제공해야 한다.
+   * AdMob이 스토어 등록정보의 개발자 웹사이트 도메인에서 이 파일을 크롤링한다.
+   */
+  @Public()
+  @Get('app-ads.txt')
+  @Header('Content-Type', 'text/plain; charset=utf-8')
+  appAdsTxt(): string {
+    return 'google.com, pub-2629679506425191, DIRECT, f08c47fec0942fa0\n';
+  }
+
   @Public()
   @Get('health')
   health() {

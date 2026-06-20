@@ -554,13 +554,16 @@ export class GamesService {
    */
   async getGameDetail(id: number, user_id: string) {
     const game = await this.gameRepository.findOne({
-      where: { id, user_id },
+      where: { id },
       relations: ['frames'],
     });
 
     if (!game) {
       throw new NotFoundException('해당 게임 기록을 찾을 수 없습니다.');
     }
+    // 본인 / 플랫폼 어드민 / 공통 클럽 멤버이면 조회 허용. 그 외는 403.
+    // (퍼펙트 알림 등으로 같은 클럽원의 게임 상세를 보러 오는 경우 지원)
+    await this.assertSelfOrAdminOrClubMate(user_id, game.user_id);
     return game;
   }
 

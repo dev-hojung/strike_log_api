@@ -90,6 +90,17 @@ export class TrialReminderService {
         });
         group.reminder_d3_sent = true;
         await this.groupRepository.save(group);
+        continue;
+      }
+
+      // 체험 중간(잔여기간) 안내 — 30일 체험 기준 약 절반 시점(15일 이하)에 1회.
+      if (daysLeft <= 15 && !group.reminder_mid_sent) {
+        await this._notifyAdmin(group, NotificationType.CLUB_TRIAL_EXPIRING_SOON, {
+          title: '클럽 체험 잔여기간 안내',
+          body: `"${group.name}" 클럽 무료 체험이 ${daysLeft}일 남았습니다.`,
+        });
+        group.reminder_mid_sent = true;
+        await this.groupRepository.save(group);
       }
     }
     this.logger.log('[TrialReminder] done');

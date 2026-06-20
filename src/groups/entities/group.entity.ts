@@ -76,10 +76,16 @@ export class Group {
   trial_started_at: Date | null;
 
   /**
-   * 체험판 만료 시각. 보통 `trial_started_at + 7일`. active 클럽은 null.
+   * 체험판 만료 시각. 보통 `trial_started_at + 30일`. active 클럽은 null.
    */
   @Column({ type: 'datetime', nullable: true })
   trial_expires_at: Date | null;
+
+  /**
+   * 체험 중간(잔여기간) 알림 전송 여부. cron에서 중복 발송 방지.
+   */
+  @Column({ type: 'boolean', default: false })
+  reminder_mid_sent: boolean;
 
   /**
    * D-3 만료 예정 알림 전송 여부. cron에서 중복 발송 방지.

@@ -242,7 +242,7 @@ export class GroupsService implements OnModuleInit {
 
   /**
    * 새로운 클럽 생성 (생성자는 ADMIN 권한 부여).
-   * 플랫폼 관리자가 직접 만든 클럽은 곧바로 `active`, 그 외는 7일 체험판.
+   * 플랫폼 관리자가 직접 만든 클럽은 곧바로 `active`, 그 외는 30일 체험판.
    */
   async createGroup(user_id: string, createData: Partial<Group>) {
     // 계정 단위 클럽 체험 시작 (아직 시작하지 않은 경우에만 설정, 멱등)
@@ -259,7 +259,7 @@ export class GroupsService implements OnModuleInit {
       };
     } else {
       const now = new Date();
-      const expires = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const expires = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
       subscriptionOverrides = {
         subscription_status: SubscriptionStatus.TRIAL,
         trial_started_at: now,
@@ -284,6 +284,19 @@ export class GroupsService implements OnModuleInit {
     void this.badgesService
       .checkAndAward(user_id)
       .catch((err) => console.error('[Groups] 클럽 생성 후 배지 평가 실패:', err));
+
+    // 비-어드민 클럽: 클럽장에게 무료 체험 시작 알림 (실패해도 생성 흐름 차단 X).
+    if (!isCreatorPlatformAdmin) {
+      void this.notificationsService
+        .create({
+          userId: user_id,
+          type: NotificationType.CLUB_TRIAL_STARTED,
+          title: '클럽 무료 체험 시작 🎉',
+          body: `"${group.name}" 클럽 30일 무료 체험이 시작됐어요. 만료 전에 안내해 드릴게요.`,
+          targetId: String(group.id),
+        })
+        .catch((err) => console.error('[Groups] 체험 시작 알림 실패:', err));
+    }
 
     return group;
   }
@@ -313,7 +326,7 @@ export class GroupsService implements OnModuleInit {
       } else {
         // 생성일 기준 + 7일로 설정. 이미 7일 지났으면 expired.
         const created = group.created_at ?? new Date();
-        const expires = new Date(created.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const expires = new Date(created.getTime() + 30 * 24 * 60 * 60 * 1000);
         group.trial_started_at = created;
         group.trial_expires_at = expires;
         group.subscription_status =

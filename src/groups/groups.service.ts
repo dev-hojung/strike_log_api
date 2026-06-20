@@ -440,6 +440,32 @@ export class GroupsService implements OnModuleInit {
   }
 
   /**
+   * 유저가 클럽 기능(클럽 게임 등)에 접근 가능한지 — 단일 권한 기준.
+   * 가입한 클럽 중 구독이 유효한(ACTIVE, 또는 TRIAL이고 만료 전) 클럽이 하나라도 있으면 true.
+   * 클럽 게임 게이트(game-rooms)와 ClubAccessGuard가 공통으로 사용한다.
+   */
+  async hasActiveClubAccess(userId: string): Promise<boolean> {
+    const memberships = await this.groupMemberRepository.find({
+      where: { user_id: userId },
+      relations: ['group'],
+    });
+    const now = Date.now();
+    for (const m of memberships) {
+      const g = m.group;
+      if (!g) continue;
+      if (g.subscription_status === SubscriptionStatus.ACTIVE) return true;
+      if (
+        g.subscription_status === SubscriptionStatus.TRIAL &&
+        g.trial_expires_at &&
+        g.trial_expires_at.getTime() > now
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * 클럽 상세 정보 조회
    */
   async getGroupDetail(id: number) {

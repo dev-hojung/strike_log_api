@@ -8,6 +8,7 @@ import { GameRoom } from './entities/game-room.entity';
 import { GameRoomParticipant } from './entities/game-room-participant.entity';
 import { Game } from '../games/entities/game.entity';
 import { UsersModule } from '../users/users.module';
+import { GroupsModule } from '../groups/groups.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { UsersModule } from '../users/users.module';
     ]),
     AuthModule,
     forwardRef(() => UsersModule),
+    GroupsModule,
   ],
   providers: [GameRoomsService, GameRoomsGateway],
   exports: [GameRoomsService],

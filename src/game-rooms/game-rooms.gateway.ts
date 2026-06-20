@@ -16,6 +16,7 @@ import { GameRoomMode, GameRoomStatus } from './entities/game-room.entity';
 import type { JwtPayload, AuthenticatedUser } from '../auth/jwt.strategy';
 import { DiscordNotifierService } from '../common/discord-notifier.service';
 import { UsersService } from '../users/users.service';
+import { GroupsService } from '../groups/groups.service';
 import { isPlatformAdmin } from '../common/admin';
 
 /**
@@ -54,6 +55,7 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
     private readonly discord: DiscordNotifierService,
     @Inject(forwardRef(() => UsersService))
     private readonly usersService: UsersService,
+    private readonly groupsService: GroupsService,
   ) {}
 
   /**
@@ -203,16 +205,13 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
 
     const mode = data?.mode === 'bet' ? GameRoomMode.BET : GameRoomMode.CLUB;
 
-    // 클럽 게임만 무료 체험이 필요하다. 내기 게임은 누구나 가능. (플랫폼 어드민 면제)
+    // 클럽 게임만 클럽 구독(체험 또는 정식)이 필요하다. 내기 게임은 누구나 가능. (어드민 면제)
     if (mode === GameRoomMode.CLUB && !isPlatformAdmin(user.id)) {
-      const userEntity = await this.usersService.findById(user.id);
-      if (
-        !userEntity?.club_trial_expires_at ||
-        userEntity.club_trial_expires_at.getTime() <= Date.now()
-      ) {
+      const hasAccess = await this.groupsService.hasActiveClubAccess(user.id);
+      if (!hasAccess) {
         client.emit('error', {
           code: 'club_trial_expired',
-          message: '클럽 무료 체험이 종료됐어요. 관리자에게 문의해주세요.',
+          message: '클럽 구독이 만료됐어요. 관리자에게 문의해주세요.',
         });
         return;
       }
@@ -254,17 +253,14 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
     const user = this.requireUser(client);
     if (!user) return;
 
-    // 클럽 게임 방에 참가할 때만 무료 체험이 필요하다. 내기 방은 누구나 가능. (어드민 면제)
+    // 클럽 게임 방 참가 시에만 클럽 구독(체험 또는 정식)이 필요하다. 내기 방은 누구나. (어드민 면제)
     const targetState = await this.gameRoomsService.getRoomState(data.roomId);
     if (targetState?.mode === GameRoomMode.CLUB && !isPlatformAdmin(user.id)) {
-      const userEntity = await this.usersService.findById(user.id);
-      if (
-        !userEntity?.club_trial_expires_at ||
-        userEntity.club_trial_expires_at.getTime() <= Date.now()
-      ) {
+      const hasAccess = await this.groupsService.hasActiveClubAccess(user.id);
+      if (!hasAccess) {
         client.emit('error', {
           code: 'club_trial_expired',
-          message: '클럽 무료 체험이 종료됐어요. 관리자에게 문의해주세요.',
+          message: '클럽 구독이 만료됐어요. 관리자에게 문의해주세요.',
         });
         return;
       }

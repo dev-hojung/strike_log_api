@@ -7,25 +7,24 @@ import {
 import { Request } from 'express';
 import type { AuthenticatedUser } from './jwt.strategy';
 import { isPlatformAdmin } from '../common/admin';
-import { UsersService } from '../users/users.service';
+import { GroupsService } from '../groups/groups.service';
 
 /**
- * 클럽 무료 체험 기간이 활성 상태인 유저만 통과시키는 가드.
+ * 클럽 구독(체험 또는 정식)이 활성인 유저만 통과시키는 가드.
  *
  * 통과 조건:
  *  - isPlatformAdmin(user.id) — 어드민 면제
- *  - user.club_trial_expires_at != null AND now < expires_at
+ *  - 가입한 클럽 중 subscription_status가 ACTIVE이거나, TRIAL이고 만료 전인 클럽이 있음
+ *    (GroupsService.hasActiveClubAccess — 게임 룸 게이트와 동일 기준)
  *
- * not_started(아직 시작 안 함) 상태는 차단된다.
- * — createGroup / join-request 같이 trial을 시작시키는 액션에는 이 가드를 붙이지 말 것.
- *    (service 내부에서 ensureClubTrialStarted를 먼저 호출하기 때문)
+ * — createGroup / join-request 같이 클럽 가입을 시작시키는 액션에는 이 가드를 붙이지 말 것.
  *
  * 에러 응답:
  *  403 { statusCode: 403, message: '...', code: 'club_trial_expired' }
  */
 @Injectable()
 export class ClubAccessGuard implements CanActivate {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly groupsService: GroupsService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
@@ -34,21 +33,18 @@ export class ClubAccessGuard implements CanActivate {
     if (!user?.id) {
       throw new ForbiddenException({
         statusCode: 403,
-        message: '클럽 무료 체험 기간이 종료됐어요. 관리자에게 문의해주세요.',
+        message: '클럽 구독이 만료됐어요. 관리자에게 문의해주세요.',
         code: 'club_trial_expired',
       });
     }
 
     if (isPlatformAdmin(user.id)) return true;
 
-    const userEntity = await this.usersService.findById(user.id);
-    if (
-      !userEntity?.club_trial_expires_at ||
-      userEntity.club_trial_expires_at.getTime() <= Date.now()
-    ) {
+    const hasAccess = await this.groupsService.hasActiveClubAccess(user.id);
+    if (!hasAccess) {
       throw new ForbiddenException({
         statusCode: 403,
-        message: '클럽 무료 체험 기간이 종료됐어요. 관리자에게 문의해주세요.',
+        message: '클럽 구독이 만료됐어요. 관리자에게 문의해주세요.',
         code: 'club_trial_expired',
       });
     }

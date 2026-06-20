@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, GoneException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, GoneException, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiBody, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { GroupsService } from './groups.service';
 import {
@@ -7,6 +7,7 @@ import {
 } from './entities/group-creation-request.entity';
 import { isPlatformAdmin } from '../common/admin';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { ClubAccessGuard } from '../auth/club-access.guard';
 
 @ApiTags('groups')
 @ApiBearerAuth('access-token')
@@ -170,6 +171,7 @@ export class GroupsController {
       '클럽 멤버 전원의 누적 평균/최고 점수/경기 수를 집계해 정렬한 리스트와 본인 순위(myRank)를 함께 반환.',
   })
   @ApiParam({ name: 'id', description: '클럽 ID', example: '1' })
+  @UseGuards(ClubAccessGuard)
   @Get(':id/leaderboard')
   getLeaderboard(
     @CurrentUser('id') userId: string,
@@ -258,6 +260,7 @@ export class GroupsController {
 
   @ApiOperation({ summary: '클럽 멤버 목록 조회' })
   @ApiParam({ name: 'id', description: '클럽 ID', example: '1' })
+  @UseGuards(ClubAccessGuard)
   @Get(':id/members')
   getMembers(@Param('id') id: string) {
     return this.groupsService.getMembers(+id);
@@ -265,6 +268,7 @@ export class GroupsController {
 
   @ApiOperation({ summary: '클럽 멤버 목록 + 통계 조회' })
   @ApiParam({ name: 'id', description: '클럽 ID', example: '1' })
+  @UseGuards(ClubAccessGuard)
   @Get(':id/members-with-stats')
   getMembersWithStats(@Param('id') id: string) {
     return this.groupsService.getMembersWithStats(+id);
@@ -330,6 +334,7 @@ export class GroupsController {
 
   @ApiOperation({ summary: '클럽 공지 목록', description: '멤버만 조회 가능.' })
   @ApiParam({ name: 'id', description: '클럽 ID' })
+  @UseGuards(ClubAccessGuard)
   @Get(':id/announcements')
   listAnnouncements(
     @Param('id') id: string,
@@ -343,6 +348,7 @@ export class GroupsController {
     description: '운영자만. 작성 후 멤버 전원에게 CLUB_ANNOUNCEMENT 알림 발송.',
   })
   @ApiParam({ name: 'id', description: '클럽 ID' })
+  @UseGuards(ClubAccessGuard)
   @Post(':id/announcements')
   createAnnouncement(
     @Param('id') id: string,
@@ -355,6 +361,7 @@ export class GroupsController {
   @ApiOperation({ summary: '클럽 공지 수정', description: '운영자만.' })
   @ApiParam({ name: 'id', description: '클럽 ID' })
   @ApiParam({ name: 'aid', description: '공지 ID' })
+  @UseGuards(ClubAccessGuard)
   @Patch(':id/announcements/:aid')
   updateAnnouncement(
     @Param('id') id: string,
@@ -368,6 +375,7 @@ export class GroupsController {
   @ApiOperation({ summary: '클럽 공지 삭제', description: '운영자만.' })
   @ApiParam({ name: 'id', description: '클럽 ID' })
   @ApiParam({ name: 'aid', description: '공지 ID' })
+  @UseGuards(ClubAccessGuard)
   @Delete(':id/announcements/:aid')
   deleteAnnouncement(
     @Param('id') id: string,

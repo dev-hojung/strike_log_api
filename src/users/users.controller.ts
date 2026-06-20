@@ -56,7 +56,17 @@ export class UsersController {
       throw new ForbiddenException('다른 사용자의 프로필을 조회할 수 없습니다.');
     }
     const profile = await this.usersService.getProfile(id);
-    return { ...profile, is_platform_admin: isPlatformAdmin(id) };
+    const clubTrialStatus =
+      profile.club_trial_started_at == null
+        ? 'not_started'
+        : (profile.club_trial_expires_at!.getTime() > Date.now() ? 'active' : 'expired');
+    return {
+      ...profile,
+      is_platform_admin: isPlatformAdmin(id),
+      club_trial_started_at: profile.club_trial_started_at,
+      club_trial_expires_at: profile.club_trial_expires_at,
+      club_trial_status: clubTrialStatus,
+    };
   }
 
   /**

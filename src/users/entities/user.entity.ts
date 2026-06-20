@@ -46,6 +46,21 @@ export class User {
   profile_image_url: string;
 
   /**
+   * 계정 단위 클럽 무료 체험 시작 시각.
+   * 첫 클럽 액션(createGroup 또는 approveJoinRequest로 멤버 추가) 시점에 설정.
+   * NULL = 아직 클럽 액션 없음.
+   */
+  @Column({ type: 'timestamp', nullable: true })
+  club_trial_started_at: Date | null;
+
+  /**
+   * 계정 단위 클럽 무료 체험 만료 시각 (started_at + 30일).
+   * NULL = 아직 시작 전.
+   */
+  @Column({ type: 'timestamp', nullable: true })
+  club_trial_expires_at: Date | null;
+
+  /**
    * 생성일
    */
   @CreateDateColumn()

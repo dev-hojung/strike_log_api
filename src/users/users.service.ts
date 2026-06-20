@@ -128,6 +128,38 @@ export class UsersService {
   }
 
   /**
+   * ID로 유저 조회. 없으면 null 반환.
+   * GameRoomsGateway 등 외부 서비스에서 trial 체크 시 사용.
+   */
+  async findById(id: string): Promise<User | null> {
+    return this.userRepository.findOne({ where: { id } });
+  }
+
+  /**
+   * 클럽 무료 체험을 아직 시작하지 않은 유저에게 30일 체험을 시작시킨다.
+   * 이미 started_at이 있으면 멱등 처리(아무 것도 하지 않음).
+   * createGroup / approveJoinRequest 시작부에서 호출.
+   */
+  async ensureClubTrialStarted(userId: string): Promise<void> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user || user.club_trial_started_at) return;
+    const now = new Date();
+    const expires = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    user.club_trial_started_at = now;
+    user.club_trial_expires_at = expires;
+    await this.userRepository.save(user);
+  }
+
+  /**
+   * 해당 유저의 클럽 무료 체험이 현재 활성 상태인지 반환.
+   * 플랫폼 어드민 면제 여부는 호출자가 처리한다.
+   */
+  isClubTrialActive(user: User): boolean {
+    if (!user.club_trial_expires_at) return false;
+    return user.club_trial_expires_at.getTime() > Date.now();
+  }
+
+  /**
    * 내 프로필 정보 조회
    */
   async getProfile(id: string) {

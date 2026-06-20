@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GroupsService } from './groups.service';
 import { GroupsController } from './groups.controller';
@@ -11,15 +11,18 @@ import { GroupAnnouncement } from './entities/group-announcement.entity';
 import { Game } from '../games/entities/game.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { BadgesModule } from '../badges/badges.module';
+import { UsersModule } from '../users/users.module';
+import { ClubAccessGuard } from '../auth/club-access.guard';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Group, GroupMember, GroupJoinRequest, GroupCreationRequest, GroupAnnouncement, Game]),
     NotificationsModule,
     BadgesModule,
+    forwardRef(() => UsersModule),
   ],
   controllers: [GroupsController],
-  providers: [GroupsService, TrialReminderService],
+  providers: [GroupsService, TrialReminderService, ClubAccessGuard],
   exports: [GroupsService],
 })
 export class GroupsModule {}

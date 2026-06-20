@@ -5,6 +5,8 @@ import {
   ConflictException,
   ForbiddenException,
   OnModuleInit,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -22,6 +24,7 @@ import { User } from '../users/entities/user.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
 import { BadgesService } from '../badges/badges.service';
+import { UsersService } from '../users/users.service';
 import { isPlatformAdmin, platformAdminIds } from '../common/admin';
 
 @Injectable()
@@ -41,6 +44,8 @@ export class GroupsService implements OnModuleInit {
     private readonly gameRepository: Repository<Game>,
     private readonly notificationsService: NotificationsService,
     private readonly badgesService: BadgesService,
+    @Inject(forwardRef(() => UsersService))
+    private readonly usersService: UsersService,
   ) {}
 
   // ---------- 클럽 생성 신청 플로우 ----------
@@ -240,6 +245,9 @@ export class GroupsService implements OnModuleInit {
    * 플랫폼 관리자가 직접 만든 클럽은 곧바로 `active`, 그 외는 7일 체험판.
    */
   async createGroup(user_id: string, createData: Partial<Group>) {
+    // 계정 단위 클럽 체험 시작 (아직 시작하지 않은 경우에만 설정, 멱등)
+    await this.usersService.ensureClubTrialStarted(user_id);
+
     const isCreatorPlatformAdmin = isPlatformAdmin(user_id);
 
     let subscriptionOverrides: Partial<Group>;
@@ -682,6 +690,9 @@ export class GroupsService implements OnModuleInit {
       role: GroupRole.MEMBER,
     });
     await this.groupMemberRepository.save(member);
+
+    // 신규 멤버의 계정 단위 클럽 체험 시작 (아직 시작하지 않은 경우에만, 멱등)
+    await this.usersService.ensureClubTrialStarted(request.user_id);
 
     // 신규 멤버십 발생 → club_joined 배지 평가 (실패해도 승인 흐름 차단 X).
     void this.badgesService

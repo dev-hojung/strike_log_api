@@ -7,6 +7,7 @@ import {
   OnGatewayConnection,
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
+import { Inject, forwardRef } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Cron } from '@nestjs/schedule';
 import { Server, Socket } from 'socket.io';
@@ -14,6 +15,8 @@ import { GameRoomsService } from './game-rooms.service';
 import { GameRoomMode, GameRoomStatus } from './entities/game-room.entity';
 import type { JwtPayload, AuthenticatedUser } from '../auth/jwt.strategy';
 import { DiscordNotifierService } from '../common/discord-notifier.service';
+import { UsersService } from '../users/users.service';
+import { isPlatformAdmin } from '../common/admin';
 
 /**
  * Socket의 `data`에 부착되는 인증 사용자 정보.
@@ -49,6 +52,8 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
     private readonly gameRoomsService: GameRoomsService,
     private readonly jwtService: JwtService,
     private readonly discord: DiscordNotifierService,
+    @Inject(forwardRef(() => UsersService))
+    private readonly usersService: UsersService,
   ) {}
 
   /**
@@ -195,6 +200,22 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
     console.log(
       `[GameRooms] createRoom received from user=${user.id}: ${JSON.stringify(data ?? {})}`,
     );
+
+    // 클럽 무료 체험 만료 여부 확인 (플랫폼 어드민 면제)
+    if (!isPlatformAdmin(user.id)) {
+      const userEntity = await this.usersService.findById(user.id);
+      if (
+        !userEntity?.club_trial_expires_at ||
+        userEntity.club_trial_expires_at.getTime() <= Date.now()
+      ) {
+        client.emit('error', {
+          code: 'club_trial_expired',
+          message: '클럽 무료 체험이 종료됐어요. 관리자에게 문의해주세요.',
+        });
+        return;
+      }
+    }
+
     try {
       const mode =
         data?.mode === 'bet' ? GameRoomMode.BET : GameRoomMode.CLUB;
@@ -232,6 +253,22 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
   ) {
     const user = this.requireUser(client);
     if (!user) return;
+
+    // 클럽 무료 체험 만료 여부 확인 (플랫폼 어드민 면제)
+    if (!isPlatformAdmin(user.id)) {
+      const userEntity = await this.usersService.findById(user.id);
+      if (
+        !userEntity?.club_trial_expires_at ||
+        userEntity.club_trial_expires_at.getTime() <= Date.now()
+      ) {
+        client.emit('error', {
+          code: 'club_trial_expired',
+          message: '클럽 무료 체험이 종료됐어요. 관리자에게 문의해주세요.',
+        });
+        return;
+      }
+    }
+
     try {
       await this.gameRoomsService.joinRoom(
         data.roomId,

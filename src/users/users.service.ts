@@ -7,11 +7,15 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { User } from './entities/user.entity';
 import { FcmToken } from '../notifications/entities/fcm-token.entity';
+import { AttendanceLog } from '../badges/entities/attendance-log.entity';
+import { GameRoom } from '../game-rooms/entities/game-room.entity';
+import { GameRoomParticipant } from '../game-rooms/entities/game-room-participant.entity';
+import { Inquiry } from '../inquiries/entities/inquiry.entity';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { EmailService } from '../email/email.service';
 
@@ -24,6 +28,7 @@ export class UsersService {
     private readonly fcmTokenRepository: Repository<FcmToken>,
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -265,20 +270,30 @@ export class UsersService {
    * - games / frames / game_series — FK CASCADE
    * - group_members / group_join_requests / group_creation_requests — FK CASCADE
    * - notifications / user_badges — FK CASCADE
-   * - fcm_tokens — userId 컬럼만 있고 FK relation 없으므로 직접 삭제
+   * - fcm_tokens / attendance_logs / game_rooms(host) / game_room_participants
+   *   / inquiries — user_id가 FK relation이 아닌 일반 컬럼이라 cascade되지 않으므로 직접 삭제
    * - users 본 행
    *
+   * 모든 삭제는 단일 트랜잭션으로 처리해 일부만 지워지는 상태를 방지한다.
    * 그룹(클럽) 자체는 삭제하지 않는다. 사용자가 만든 클럽이라도 다른 멤버가 남아 있다면 보존.
    *
    * @throws NotFoundException 대상 사용자가 존재하지 않을 때
    */
   async deleteMe(userId: string): Promise<void> {
-    // FCM 토큰은 onDelete CASCADE가 없어 별도 정리.
-    await this.fcmTokenRepository.delete({ userId });
+    await this.dataSource.transaction(async (manager) => {
+      // user_id가 FK relation이 아닌 일반 컬럼이라 cascade되지 않는 데이터들을 직접 정리.
+      await manager.delete(FcmToken, { userId });
+      await manager.delete(AttendanceLog, { user_id: userId });
+      await manager.delete(GameRoomParticipant, { user_id: userId });
+      // 사용자가 호스트한 방 삭제 → 해당 방의 다른 참가자 행은 FK CASCADE로 함께 정리.
+      await manager.delete(GameRoom, { host_id: userId });
+      await manager.delete(Inquiry, { user_id: userId });
 
-    const result = await this.userRepository.delete({ id: userId });
-    if (result.affected === 0) {
-      throw new NotFoundException('사용자를 찾을 수 없습니다.');
-    }
+      // users 삭제 → games/frames/series/group_*/notifications/user_badges는 FK CASCADE.
+      const result = await manager.delete(User, { id: userId });
+      if (result.affected === 0) {
+        throw new NotFoundException('사용자를 찾을 수 없습니다.');
+      }
+    });
   }
 }

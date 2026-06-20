@@ -201,8 +201,10 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
       `[GameRooms] createRoom received from user=${user.id}: ${JSON.stringify(data ?? {})}`,
     );
 
-    // 클럽 무료 체험 만료 여부 확인 (플랫폼 어드민 면제)
-    if (!isPlatformAdmin(user.id)) {
+    const mode = data?.mode === 'bet' ? GameRoomMode.BET : GameRoomMode.CLUB;
+
+    // 클럽 게임만 무료 체험이 필요하다. 내기 게임은 누구나 가능. (플랫폼 어드민 면제)
+    if (mode === GameRoomMode.CLUB && !isPlatformAdmin(user.id)) {
       const userEntity = await this.usersService.findById(user.id);
       if (
         !userEntity?.club_trial_expires_at ||
@@ -217,8 +219,6 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
     }
 
     try {
-      const mode =
-        data?.mode === 'bet' ? GameRoomMode.BET : GameRoomMode.CLUB;
       const roomId = await this.gameRoomsService.createRoom(
         user.id,
         data?.nickname ?? '게스트',
@@ -254,8 +254,9 @@ export class GameRoomsGateway implements OnGatewayConnection, OnGatewayDisconnec
     const user = this.requireUser(client);
     if (!user) return;
 
-    // 클럽 무료 체험 만료 여부 확인 (플랫폼 어드민 면제)
-    if (!isPlatformAdmin(user.id)) {
+    // 클럽 게임 방에 참가할 때만 무료 체험이 필요하다. 내기 방은 누구나 가능. (어드민 면제)
+    const targetState = await this.gameRoomsService.getRoomState(data.roomId);
+    if (targetState?.mode === GameRoomMode.CLUB && !isPlatformAdmin(user.id)) {
       const userEntity = await this.usersService.findById(user.id);
       if (
         !userEntity?.club_trial_expires_at ||

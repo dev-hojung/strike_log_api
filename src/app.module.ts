@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -35,6 +36,15 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
       cache: false,
     }),
     ScheduleModule.forRoot(),
+    // 비정상 호출(과다 요청) 차단용 rate limiter.
+    // 두 개의 시간창을 전역에 두고, 민감 라우트는 @Throttle로 더 빡빡하게 덮어쓴다.
+    //  - default: 60초당 100회 (일반 사용엔 안 걸리는 느슨한 기준)
+    //  - long:    1시간당 1000회 (느린 폭주 차단)
+    // ⚠️ Railway 프록시 뒤이므로 main.ts에서 `trust proxy`를 켜야 클라이언트 실제 IP로 집계됨.
+    ThrottlerModule.forRoot([
+      { name: 'default', ttl: 60_000, limit: 100 },
+      { name: 'long', ttl: 3_600_000, limit: 1000 },
+    ]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -75,6 +85,8 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
   controllers: [AppController],
   providers: [
     AppService,
+    // 전역 rate limit 가드. 인증보다 먼저 실행되어 과다 호출을 인증 처리 전에 차단.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     // 전역 JWT 인증 가드. @Public()이 붙은 라우트만 무인증 허용.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     // 전역 ExceptionFilter: 5xx만 Discord 알림

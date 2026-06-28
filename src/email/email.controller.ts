@@ -1,4 +1,5 @@
 import { Controller, Post, Body, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { EmailService } from './email.service';
 import { Public } from '../auth/public.decorator';
@@ -22,6 +23,11 @@ export class EmailController {
       },
     },
   })
+  // OTP 폭탄 방지: IP당 60초 3회 + 1시간 10회. (이메일별 쿨다운은 service에서 추가 방어)
+  @Throttle({
+    default: { limit: 3, ttl: 60_000 },
+    long: { limit: 10, ttl: 3_600_000 },
+  })
   @Post('send-otp')
   async sendOtp(@Body() body: { email: string; purpose?: 'signup' | 'reset' }) {
     if (!body?.email) {
@@ -43,6 +49,8 @@ export class EmailController {
       },
     },
   })
+  // 6자리 코드 무차별 대입 방지: IP당 60초 5회.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('verify-otp')
   @HttpCode(HttpStatus.OK)
   async verifyOtp(@Body() body: { email: string; code: string }) {

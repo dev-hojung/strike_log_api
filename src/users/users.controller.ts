@@ -1,5 +1,6 @@
 import { LoginUserDto } from './dto/login-user.dto';
 import { Controller, Get, Post, Body, Patch, Param, Delete, ForbiddenException } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiParam, ApiBody } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { Public } from '../auth/public.decorator';
@@ -15,6 +16,8 @@ export class UsersController {
    * 이메일/비밀번호 로그인
    */
   @ApiOperation({ summary: '이메일/비밀번호 로그인' })
+  // 비밀번호 무차별 대입 / 계정 탐색 방지: IP당 60초 5회.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Public()
   @Post('login')
   async login(@Body() body: LoginUserDto) {
@@ -33,6 +36,8 @@ export class UsersController {
       },
     },
   })
+  // 가짜 계정 대량 생성 방지: IP당 1시간 5회.
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
   @Public()
   @Post('signup')
   async signup(@Body() body: { email: string; password?: string; nickname?: string }) {
@@ -87,6 +92,8 @@ export class UsersController {
       },
     },
   })
+  // OTP 무차별 대입 방지: IP당 60초 5회.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Public()
   @Post('forgot-password/reset')
   resetPasswordWithOtp(

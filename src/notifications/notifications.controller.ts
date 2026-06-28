@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Logger, NotFoundException, Param, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiParam, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -89,6 +90,8 @@ export class NotificationsController {
    * userId=null로 저장돼 개인 알림은 안 받지만 시스템 공지 같은 broadcast 푸시는 수신.
    * 같은 token이 이미 사용자에 바인딩돼 있으면 해당 바인딩이 NULL로 덮어써짐 — 로그아웃 흐름과 일관됨.
    */
+  // 익명 토큰 스팸 방지: IP당 60초 10회.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Public()
   @ApiOperation({
     summary: '익명 FCM 디바이스 토큰 등록 (로그아웃 디바이스 / 가입 전)',

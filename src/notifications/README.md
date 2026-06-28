@@ -30,9 +30,10 @@
 | POST | `/notifications/:id/read` | 알림 단건 읽음 처리 |
 | POST | `/notifications/me/read-all` | 현재 사용자의 모든 알림 읽음 처리 |
 | POST | `/notifications/me/fcm-token` | FCM 디바이스 토큰 등록 |
+| POST | `/notifications/fcm-token` | **익명** FCM 토큰 등록(`@Public`). rate limit: IP당 60초 10회 → 초과 시 `429` |
 | DELETE | `/notifications/me/fcm-token` | FCM 디바이스 토큰 삭제 (로그아웃 등) |
 
-모든 엔드포인트는 Bearer 토큰 필수 (`@CurrentUser` 데코레이터로 userId 추출).
+`/notifications/fcm-token`(익명 등록)을 제외한 모든 엔드포인트는 Bearer 토큰 필수 (`@CurrentUser` 데코레이터로 userId 추출).
 
 ---
 

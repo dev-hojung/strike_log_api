@@ -29,8 +29,8 @@
 
 | HTTP | 경로 | 설명 |
 |------|------|------|
-| `POST` | `/users/login` | 이메일/비밀번호로 로그인. JWT 토큰과 사용자 정보 반환 |
-| `POST` | `/users/signup` | 이메일/비밀번호로 회원가입. 닉네임 선택 입력 시 이메일 아이디 자동 설정 |
+| `POST` | `/users/login` | 이메일/비밀번호로 로그인. JWT 토큰과 사용자 정보 반환. **rate limit: IP당 60초 5회** |
+| `POST` | `/users/signup` | 이메일/비밀번호로 회원가입. 닉네임 선택 입력 시 이메일 아이디 자동 설정. **rate limit: IP당 1시간 5회** |
 | `GET` | `/users/:id` | 유저 프로필 조회. 본인 또는 관리자만 접근 가능 |
 | `POST` | `/users/:id/change-password` | 비밀번호 변경. 현재 비밀번호 검증 후 새 비밀번호로 업데이트 |
 | `PATCH` | `/users/:id` | 프로필 수정 (닉네임, 프로필 이미지 URL, 전화번호). 본인만 수정 가능 |
@@ -63,6 +63,9 @@
 - 본인이 아닌 사용자의 프로필 수정 시도 시 ForbiddenException 발생
 - 관리자는 모든 프로필 조회 가능
 - password 필드는 select: false로 설정되어 기본 조회에 포함 안 됨
+- 무인증 라우트는 `@nestjs/throttler` rate limit 적용. 초과 시 `429 Too Many Requests`:
+  - `/users/login`, `/users/forgot-password/reset`: IP당 60초 5회 (무차별 대입 방지)
+  - `/users/signup`: IP당 1시간 5회 (가짜 계정 대량 생성 방지)
 
 ## 모듈 구조
 

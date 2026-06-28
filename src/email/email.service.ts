@@ -1,10 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomInt } from 'crypto';
 import { Repository } from 'typeorm';
 import { Resend } from 'resend';
 import { EmailAuth } from './entities/email-auth.entity';
+
+/** 같은 이메일로 OTP를 재발송할 수 있기까지의 최소 간격(ms). IP 우회 공격에도 한 메일함 폭탄을 차단. */
+const OTP_RESEND_COOLDOWN_MS = 60_000;
 
 @Injectable()
 export class EmailService {
@@ -26,6 +29,23 @@ export class EmailService {
     email: string,
     purpose: 'signup' | 'reset' = 'signup',
   ): Promise<boolean> {
+    // 이메일별 재발송 쿨다운: 같은 주소로 가장 최근 발송 후 60초가 안 지났으면 거부.
+    // (IP 기반 throttler를 우회해도 특정 메일함으로의 OTP 폭탄을 막는다.)
+    const lastSent = await this.emailAuthRepository.findOne({
+      where: { email },
+      order: { created_at: 'DESC' },
+    });
+    if (lastSent) {
+      const elapsed = Date.now() - new Date(lastSent.created_at).getTime();
+      if (elapsed < OTP_RESEND_COOLDOWN_MS) {
+        const wait = Math.ceil((OTP_RESEND_COOLDOWN_MS - elapsed) / 1000);
+        throw new HttpException(
+          `인증번호는 ${wait}초 후에 다시 요청할 수 있습니다.`,
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    }
+
     try {
       const otpCode = randomInt(100000, 1000000).toString();
 
